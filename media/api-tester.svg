@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28">
+  <!-- 背景边框 -->
+  <rect x="2" y="2" width="24" height="24" rx="3" fill="none" stroke="#C5C5C5" stroke-width="1.5"/>
+  
+  <!-- API 文字 -->
+  <text x="14" y="18" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#C5C5C5" text-anchor="middle">API</text>
+</svg>
