@@ -3,7 +3,7 @@
   "displayName": "APIs Tester",
   "author": "bmqy",
   "description": "Test APIs inside VS Code with grouping, headers, body presets, and WebDAV backup.",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "publisher": "bmqy",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -15,7 +15,8 @@
     "vscode": "^1.84.0"
   },
   "categories": [
-    "Other"
+    "Debuggers",
+    "Testing"
   ],
   "activationEvents": [
     "onCommand:apiTester.openPanel",

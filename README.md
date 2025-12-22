@@ -2,6 +2,11 @@
 
 一个轻量级的 VS Code 扩展，用于在编辑器内快速测试和管理 API 接口。支持分组管理、导入导出、WebDAV 云端同步，让 API 测试更加高效。
 
+## 📦 安装
+
+- [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=bmqy.apis-tester)
+- [Open VSX Registry](https://open-vsx.org/extension/bmqy/apis-tester)
+
 ## ✨ 核心功能
 
 ### 📡 API 测试
