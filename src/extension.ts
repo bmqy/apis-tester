@@ -384,8 +384,19 @@ async function restoreFromCommand(context: vscode.ExtensionContext) {
   if (!cfg) return;
   await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "WebDAV 恢复中..." }, async () => {
     const res = await handleRestore(context, cfg);
-    if (res.success) vscode.window.showInformationMessage("恢复成功");
-    else vscode.window.showErrorMessage(`恢复失败: ${res.error}`);
+    if (res.success) {
+      vscode.window.showInformationMessage("恢复成功");
+      // 刷新侧边栏显示恢复的内容
+      if (sidebarViewProviderRef && res.state) {
+        sidebarViewProviderRef.pushState(res.state);
+      }
+      // 广播给所有打开的面板
+      if (res.state) {
+        broadcastState(res.state);
+      }
+    } else {
+      vscode.window.showErrorMessage(`恢复失败: ${res.error}`);
+    }
   });
 }
 
