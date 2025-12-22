@@ -3,9 +3,10 @@
   "displayName": "APIs Tester",
   "author": "bmqy",
   "description": "Test APIs inside VS Code with grouping, headers, body presets, and WebDAV backup.",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "bmqy",
   "license": "MIT",
+  "icon": "media/icon.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/bmqy/apis-tester.git"
