@@ -123,9 +123,18 @@
                 <option value="raw">Raw Text</option>
               </select>
             </label>
-            <label class="full">Body 内容
-              <textarea id="bodyInput" rows="6" placeholder='{"name":"Codex"}'></textarea>
-            </label>
+          </div>
+          <div class="body-editor">
+            <div class="label-row">
+              <span>Body 内容</span>
+              <div>
+                <button id="formatJsonBtn" type="button" class="ghost mini" style="display:none;">格式化 JSON</button>
+                <button id="addBodyFieldBtn" type="button" style="display:none;">添加字段</button>
+                <button id="toggleBodyModeBtn" type="button" class="ghost mini" style="display:none;">切换为文本模式</button>
+              </div>
+            </div>
+            <div id="bodyFields" style="display:none;"></div>
+            <textarea id="bodyInput" rows="6" placeholder='{"name":"Codex"}'></textarea>
           </div>
         </div>
       </div>
@@ -155,11 +164,17 @@
     headerRows: document.getElementById("headerRows"),
     bodyType: document.getElementById("bodyType"),
     bodyInput: document.getElementById("bodyInput"),
+    bodyFields: document.getElementById("bodyFields"),
+    formatJsonBtn: document.getElementById("formatJsonBtn"),
+    addBodyFieldBtn: document.getElementById("addBodyFieldBtn"),
+    toggleBodyModeBtn: document.getElementById("toggleBodyModeBtn"),
     sendBtn: document.getElementById("sendBtn"),
     responseMeta: document.getElementById("responseMeta"),
     responseBody: document.getElementById("responseBody"),
     copyResponseBtn: document.getElementById("copyResponseBtn"),
   };
+
+  let bodyEditMode = "text"; // "text" or "visual"
 
   window.addEventListener("message", (event) => {
     const { type, payload, selectedApiId, selectedGroupId } = event.data;
@@ -203,6 +218,20 @@
   });
 
   elems.addHeaderBtn.addEventListener("click", () => addHeaderRow());
+
+  elems.bodyType.addEventListener("change", () => {
+    updateBodyEditor();
+  });
+
+  elems.formatJsonBtn.addEventListener("click", () => {
+    formatJson();
+  });
+
+  elems.addBodyFieldBtn.addEventListener("click", () => addBodyField());
+
+  elems.toggleBodyModeBtn.addEventListener("click", () => {
+    toggleBodyMode();
+  });
 
   elems.sendBtn.addEventListener("click", () => {
     const api = collectApiForm();
@@ -279,6 +308,9 @@
     } else {
       entries.forEach(([key, value]) => addHeaderRow(key, value));
     }
+
+    // 更新 body 编辑器
+    updateBodyEditor();
   }
 
   function stringifyBody(body) {
@@ -302,6 +334,20 @@
     const groupValue = elems.apiGroup.value;
     const groupId = groupValue && typeof groupValue === "string" && groupValue.trim() !== "" ? groupValue.trim() : null;
 
+    // 收集 body 数据
+    let body = "";
+    if (bodyEditMode === "visual" && (elems.bodyType.value === "form-data" || elems.bodyType.value === "urlencoded")) {
+      const bodyObj = {};
+      elems.bodyFields.querySelectorAll(".body-field-row").forEach((row) => {
+        const key = row.querySelector(".bf-key").value.trim();
+        const value = row.querySelector(".bf-val").value.trim();
+        if (key) bodyObj[key] = value;
+      });
+      body = JSON.stringify(bodyObj);
+    } else {
+      body = elems.bodyInput.value;
+    }
+
     return {
       id: currentApiId || uid(),
       name: elems.apiName.value.trim(),
@@ -310,7 +356,7 @@
       groupId: groupId,
       headers,
       bodyType: elems.bodyType.value,
-      body: elems.bodyInput.value,
+      body: body,
     };
   }
 
@@ -461,6 +507,125 @@
     if (target) {
       target.scrollIntoView({ behavior: "smooth", block: "start" });
     }
+  }
+
+  function updateBodyEditor() {
+    const bodyType = elems.bodyType.value;
+    const supportsVisual = bodyType === "form-data" || bodyType === "urlencoded";
+    
+    // JSON 类型显示格式化按钮
+    if (bodyType === "json") {
+      elems.formatJsonBtn.style.display = "inline-block";
+      elems.toggleBodyModeBtn.style.display = "none";
+      elems.addBodyFieldBtn.style.display = "none";
+      elems.bodyFields.style.display = "none";
+      elems.bodyInput.style.display = "block";
+      bodyEditMode = "text";
+    }
+    // 表单数据支持可视化
+    else if (supportsVisual) {
+      elems.formatJsonBtn.style.display = "none";
+      elems.toggleBodyModeBtn.style.display = "inline-block";
+      elems.addBodyFieldBtn.style.display = bodyEditMode === "visual" ? "inline-block" : "none";
+      elems.bodyFields.style.display = bodyEditMode === "visual" ? "block" : "none";
+      elems.bodyInput.style.display = bodyEditMode === "visual" ? "none" : "block";
+      
+      if (bodyEditMode === "visual") {
+        elems.toggleBodyModeBtn.textContent = "切换为文本模式";
+        syncBodyFieldsFromText();
+      } else {
+        elems.toggleBodyModeBtn.textContent = "切换为可视化模式";
+      }
+    }
+    // 其他类型只显示文本框
+    else {
+      bodyEditMode = "text";
+      elems.formatJsonBtn.style.display = "none";
+      elems.toggleBodyModeBtn.style.display = "none";
+      elems.addBodyFieldBtn.style.display = "none";
+      elems.bodyFields.style.display = "none";
+      elems.bodyInput.style.display = "block";
+    }
+  }
+
+  function formatJson() {
+    const text = elems.bodyInput.value.trim();
+    if (!text) return;
+    
+    try {
+      const obj = JSON.parse(text);
+      elems.bodyInput.value = JSON.stringify(obj, null, 2);
+    } catch (e) {
+      elems.responseMeta.textContent = "JSON 格式错误：" + e.message;
+      setTimeout(() => {
+        elems.responseMeta.textContent = "";
+      }, 3000);
+    }
+  }
+
+  function toggleBodyMode() {
+    if (bodyEditMode === "text") {
+      bodyEditMode = "visual";
+      updateBodyEditor();
+    } else {
+      bodyEditMode = "text";
+      syncBodyTextFromFields();
+      updateBodyEditor();
+    }
+  }
+
+  function syncBodyFieldsFromText() {
+    elems.bodyFields.innerHTML = "";
+    const text = elems.bodyInput.value.trim();
+    if (!text) {
+      addBodyField();
+      return;
+    }
+    
+    try {
+      const obj = JSON.parse(text);
+      if (obj && typeof obj === "object" && !Array.isArray(obj)) {
+        const entries = Object.entries(obj);
+        if (entries.length === 0) {
+          addBodyField();
+        } else {
+          entries.forEach(([key, value]) => {
+            addBodyField(key, typeof value === "string" ? value : JSON.stringify(value));
+          });
+        }
+        return;
+      }
+    } catch (e) {
+      // 如果不是有效的 JSON，尝试解析为键值对格式
+    }
+    
+    addBodyField();
+  }
+
+  function syncBodyTextFromFields() {
+    const bodyObj = {};
+    elems.bodyFields.querySelectorAll(".body-field-row").forEach((row) => {
+      const key = row.querySelector(".bf-key").value.trim();
+      const value = row.querySelector(".bf-val").value.trim();
+      if (key) bodyObj[key] = value;
+    });
+    
+    if (Object.keys(bodyObj).length > 0) {
+      elems.bodyInput.value = JSON.stringify(bodyObj, null, 2);
+    }
+  }
+
+  function addBodyField(key = "", value = "") {
+    const row = document.createElement("div");
+    row.className = "body-field-row";
+    row.innerHTML = `
+      <input class="bf-key" placeholder="Key" value="${key}" />
+      <input class="bf-val" placeholder="Value" value="${value}" />
+      <button class="mini ghost">x</button>
+    `;
+    const removeBtn = row.querySelector("button");
+    removeBtn.onclick = () => row.remove();
+    elems.bodyFields.appendChild(row);
   }
 
   function uid() {
