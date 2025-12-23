@@ -2,7 +2,7 @@
   "name": "apis-tester",
   "displayName": "APIs Tester",
   "author": "bmqy",
-  "description": "Test APIs inside VS Code with grouping, headers, body presets, and WebDAV backup.",
+  "description": "在 VS Code 中测试 API，支持分组、请求头、Body 预设和 WebDAV 备份",
   "version": "0.0.4",
   "publisher": "bmqy",
   "license": "MIT",

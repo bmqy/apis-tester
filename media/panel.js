@@ -241,6 +241,9 @@
   }
 
   function renderGroups() {
+    // 保留当前选中的分组ID
+    const currentSelectedGroupId = elems.apiGroup.value;
+    
     elems.apiGroup.innerHTML = `<option value="">未分组</option>`;
     state.groups.forEach((g) => {
       const opt = document.createElement("option");
@@ -248,6 +251,11 @@
       opt.textContent = g.name || "未命名分组";
       elems.apiGroup.appendChild(opt);
     });
+    
+    // 恢复之前选中的分组
+    if (currentSelectedGroupId && state.groups.some((g) => g.id === currentSelectedGroupId)) {
+      elems.apiGroup.value = currentSelectedGroupId;
+    }
   }
 
   function fillApiForm(api) {
@@ -258,7 +266,9 @@
     elems.apiName.value = api.name || "";
     elems.apiUrl.value = api.url || "";
     elems.apiMethod.value = api.method || "GET";
-    elems.apiGroup.value = api.groupId || "";
+    // 确保设置的分组ID在当前可用的分组中存在
+    const validGroupId = api.groupId && state.groups.some((g) => g.id === api.groupId) ? api.groupId : "";
+    elems.apiGroup.value = validGroupId;
     elems.bodyType.value = api.bodyType || "json";
     elems.bodyInput.value = api.body ? stringifyBody(api.body) : "";
 
@@ -288,12 +298,16 @@
       if (key) headers[key] = value;
     });
 
+    // 从表单获取分组ID，确保保留有效的分组引用
+    const groupValue = elems.apiGroup.value;
+    const groupId = groupValue && typeof groupValue === "string" && groupValue.trim() !== "" ? groupValue.trim() : null;
+
     return {
       id: currentApiId || uid(),
       name: elems.apiName.value.trim(),
       url: elems.apiUrl.value.trim(),
       method: elems.apiMethod.value,
-      groupId: elems.apiGroup.value || null,
+      groupId: groupId,
       headers,
       bodyType: elems.bodyType.value,
       body: elems.bodyInput.value,
