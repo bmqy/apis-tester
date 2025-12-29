@@ -210,6 +210,7 @@
 
   let bodyEditMode = "text"; // "text" or "visual"
   let selectedFiles = []; // 存储选择的文件信息（包含内容）
+  let pendingGroupId = null; // 待选中的新分组ID
 
   window.addEventListener("message", (event) => {
     const { type, payload, selectedApiId, selectedGroupId } = event.data;
@@ -248,6 +249,7 @@
     const name = elems.newGroupName.value.trim();
     if (!name) return;
     const group = { id: uid(), name };
+    pendingGroupId = group.id; // 记录新分组ID，待状态更新后选中
     vscode.postMessage({ type: "saveGroup", payload: group });
     elems.newGroupName.value = "";
   });
@@ -348,8 +350,13 @@
       elems.apiGroup.appendChild(opt);
     });
     
-    // 恢复之前选中的分组
-    if (currentSelectedGroupId && state.groups.some((g) => g.id === currentSelectedGroupId)) {
+    // 如果有待选中的新分组，优先选中它
+    if (pendingGroupId && state.groups.some((g) => g.id === pendingGroupId)) {
+      elems.apiGroup.value = pendingGroupId;
+      pendingGroupId = null; // 清除标记
+    }
+    // 否则恢复之前选中的分组
+    else if (currentSelectedGroupId && state.groups.some((g) => g.id === currentSelectedGroupId)) {
       elems.apiGroup.value = currentSelectedGroupId;
     }
   }
