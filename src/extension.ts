@@ -183,6 +183,11 @@ function openPanel(
         panel.webview.postMessage({ type: "response", payload: result });
         break;
       }
+      case "sendRequestWithFiles": {
+        const result = await handleRequestWithFiles(message.payload.api as ApiRequest, message.payload.filePaths);
+        panel.webview.postMessage({ type: "response", payload: result });
+        break;
+      }
       case "backupWebdav": {
         const result = await handleBackup(readState(context), message.payload);
         panel.webview.postMessage({ type: "backupResult", payload: result });
@@ -285,6 +290,48 @@ async function handleRequest(api: ApiRequest) {
       default:
         break;
     }
+    const res: AxiosResponse = await axios(config);
+    return { success: true, status: res.status, statusText: res.statusText, headers: res.headers, data: res.data };
+  } catch (error: any) {
+    return { success: false, error: error?.message || String(error) };
+  }
+}
+
+async function handleRequestWithFiles(api: ApiRequest, filePaths: any[]) {
+  try {
+    if (!filePaths || filePaths.length === 0) {
+      return { success: false, error: "未选择文件" };
+    }
+
+    const config: AxiosRequestConfig = {
+      url: api.url,
+      method: api.method,
+      headers: api.headers,
+      validateStatus: () => true,
+    };
+
+    const form = new FormData();
+
+    // 添加表单字段
+    if (api.body) {
+      try {
+        const bodyObj = JSON.parse(api.body);
+        Object.entries(bodyObj).forEach(([k, v]) => form.append(k, v as any));
+      } catch (e) {
+        // 如果解析失败，忽略
+      }
+    }
+
+    // 添加文件（从 base64 内容转换为 Buffer）
+    for (const fileInfo of filePaths) {
+      const fileName = fileInfo.name;
+      const fileBuffer = Buffer.from(fileInfo.content, 'base64');
+      form.append("file", fileBuffer, fileName);
+    }
+
+    config.data = form;
+    config.headers = { ...config.headers, ...form.getHeaders() };
+
     const res: AxiosResponse = await axios(config);
     return { success: true, status: res.status, statusText: res.statusText, headers: res.headers, data: res.data };
   } catch (error: any) {

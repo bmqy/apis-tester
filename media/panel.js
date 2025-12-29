@@ -136,6 +136,14 @@
             <div id="bodyFields" style="display:none;"></div>
             <textarea id="bodyInput" rows="6" placeholder='{"name":"Codex"}'></textarea>
           </div>
+          <div class="file-upload-section" id="fileUploadSection" style="display:none;">
+            <div class="label-row">
+              <span>文件上传</span>
+              <button id="addFileBtn" type="button">添加文件</button>
+            </div>
+            <div id="fileList"></div>
+            <input type="file" id="fileInput" multiple />
+          </div>
         </div>
       </div>
       <div class="block">
@@ -172,9 +180,14 @@
     responseMeta: document.getElementById("responseMeta"),
     responseBody: document.getElementById("responseBody"),
     copyResponseBtn: document.getElementById("copyResponseBtn"),
+    fileUploadSection: document.getElementById("fileUploadSection"),
+    fileList: document.getElementById("fileList"),
+    addFileBtn: document.getElementById("addFileBtn"),
+    fileInput: document.getElementById("fileInput"),
   };
 
   let bodyEditMode = "text"; // "text" or "visual"
+  let selectedFiles = []; // 存储选择的文件信息（包含内容）
 
   window.addEventListener("message", (event) => {
     const { type, payload, selectedApiId, selectedGroupId } = event.data;
@@ -233,6 +246,31 @@
     toggleBodyMode();
   });
 
+  elems.addFileBtn.addEventListener("click", () => {
+    elems.fileInput.click();
+  });
+
+  elems.fileInput.addEventListener("change", async (e) => {
+    const files = Array.from(e.target.files || []);
+    for (const file of files) {
+      // 读取文件内容为 base64
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64Content = event.target.result.split(',')[1]; // 移除 data:xxx;base64, 前缀
+        const fileInfo = {
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          content: base64Content
+        };
+        selectedFiles.push(fileInfo);
+        addFileToList(fileInfo);
+      };
+      reader.readAsDataURL(file);
+    }
+    elems.fileInput.value = ""; // 清空输入，允许重复选择同名文件
+  });
+
   elems.sendBtn.addEventListener("click", () => {
     const api = collectApiForm();
     if (!api.url) {
@@ -245,7 +283,14 @@
     }
     vscode.postMessage({ type: "saveApi", payload: api });
     currentApiId = api.id;
-    vscode.postMessage({ type: "sendRequest", payload: api });
+    
+    // 如果有文件，发送文件上传请求
+    if (selectedFiles.length > 0) {
+      vscode.postMessage({ type: "sendRequestWithFiles", payload: { api, filePaths: selectedFiles } });
+    } else {
+      vscode.postMessage({ type: "sendRequest", payload: api });
+    }
+    
     elems.responseMeta.textContent = "请求中...";
     elems.responseBody.textContent = "";
   });
@@ -513,6 +558,15 @@
     const bodyType = elems.bodyType.value;
     const supportsVisual = bodyType === "form-data" || bodyType === "urlencoded";
     
+    // form-data 类型时显示文件上传区域
+    if (bodyType === "form-data") {
+      elems.fileUploadSection.style.display = "block";
+    } else {
+      elems.fileUploadSection.style.display = "none";
+      selectedFiles = [];
+      elems.fileList.innerHTML = "";
+    }
+    
     // JSON 类型显示格式化按钮
     if (bodyType === "json") {
       elems.formatJsonBtn.style.display = "inline-block";
@@ -626,6 +680,36 @@
     const removeBtn = row.querySelector("button");
     removeBtn.onclick = () => row.remove();
     elems.bodyFields.appendChild(row);
+  }
+
+  function addFileToList(file) {
+    const row = document.createElement("div");
+    row.className = "file-item";
+    const sizeText = formatFileSize(file.size);
+    row.innerHTML = `
+      <div class="file-info">
+        <span class="file-name">${file.name}</span>
+        <span class="file-size">${sizeText}</span>
+      </div>
+      <button class="mini ghost">移除</button>
+    `;
+    const removeBtn = row.querySelector("button");
+    removeBtn.onclick = () => {
+      const index = selectedFiles.indexOf(file);
+      if (index > -1) {
+        selectedFiles.splice(index, 1);
+      }
+      row.remove();
+    };
+    elems.fileList.appendChild(row);
+  }
+
+  function formatFileSize(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
   }
 
   function uid() {

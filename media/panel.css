@@ -261,3 +261,49 @@ textarea {
     margin-left: 0;
   }
 }
+
+.file-upload-section {
+  margin-top: 12px;
+}
+
+.file-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  margin-bottom: 6px;
+}
+
+.file-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.file-name {
+  font-weight: 500;
+  color: #1f2937;
+  font-size: 13px;
+}
+
+.file-size {
+  color: #6b7280;
+  font-size: 11px;
+}
+
+.file-item button {
+  margin-left: 8px;
+}
+
+#fileInput {
+  position: absolute !important;
+  left: -9999px !important;
+  width: 1px !important;
+  height: 1px !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
