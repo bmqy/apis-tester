@@ -29,6 +29,18 @@ button:hover {
   box-shadow: 0 4px 12px rgba(47, 128, 237, 0.25);
 }
 
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+button:disabled:hover {
+  transform: none;
+  box-shadow: none;
+}
+
 button.ghost {
   background: #ffffff;
   color: #1f2937;

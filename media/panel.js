@@ -309,6 +309,11 @@
     if (!api.name) {
       api.name = api.url;
     }
+    
+    // 禁用按钮，显示加载状态
+    elems.sendBtn.disabled = true;
+    elems.sendBtn.textContent = "发送中...";
+    
     vscode.postMessage({ type: "saveApi", payload: api });
     currentApiId = api.id;
     
@@ -530,6 +535,11 @@
 
   function handleResponse(res) {
     if (!res) return;
+    
+    // 响应完成，启用按钮
+    elems.sendBtn.disabled = false;
+    elems.sendBtn.textContent = "发送/保存";
+    
     if (!res.success) {
       elems.responseMeta.textContent = `请求失败：${res.error}`;
       elems.responseBody.textContent = "";
