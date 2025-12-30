@@ -386,6 +386,15 @@ function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="${styleUri}" />
     <title>API Tester</title>
+    <style>
+      html, body, #app {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+      }
+    </style>
   </head>
   <body>
     <div id="app"></div>

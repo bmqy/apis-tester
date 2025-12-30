@@ -96,88 +96,92 @@
 
   const app = document.getElementById("app");
   app.innerHTML = `
-    <main class="single-column">
-      <div class="block" id="configBlock">
-        <div class="block-header">
-          <span>接口配置</span>
-          <div>
-            <button id="sendBtn" class="primary">发送/保存</button>
-          </div>
-        </div>
-        <div class="form">
-          <label>名称 <input id="apiName" placeholder="例如：获取用户信息" /></label>
-          <label>URL <input id="apiUrl" placeholder="https://example.com/api" /></label>
-          <div class="row">
-            <label>Method
-              <select id="apiMethod">
-                <option>GET</option>
-                <option>POST</option>
-                <option>PUT</option>
-                <option>PATCH</option>
-                <option>DELETE</option>
-                <option>HEAD</option>
-                <option>OPTIONS</option>
-              </select>
-            </label>
-            <label>分组
-              <select id="apiGroup">
-                <option value="">未分组</option>
-              </select>
-            </label>
-          </div>
-          <div class="inline-form" style="margin-top: 8px;">
-            <input id="newGroupName" placeholder="新分组名称" />
-            <button id="addGroupBtn" type="button">添加分组</button>
-          </div>
-          <div class="headers">
-            <div class="label-row">
-              <span>Headers</span>
-              <button id="addHeaderBtn" type="button">添加 Header</button>
+    <main class="two-column">
+      <div class="left-column">
+        <div class="block" id="configBlock">
+          <div class="block-header">
+            <span>接口配置</span>
+            <div>
+              <button id="sendBtn" class="primary">发送/保存</button>
             </div>
-            <div id="headerRows"></div>
           </div>
-          <div class="row">
-            <label>Body 类型
-              <select id="bodyType">
-                <option value="json">JSON</option>
-                <option value="form-data">FormData</option>
-                <option value="urlencoded">x-www-form-urlencoded</option>
-                <option value="raw">Raw Text</option>
-              </select>
-            </label>
-          </div>
-          <div class="body-editor">
-            <div class="label-row">
-              <span>Body 内容</span>
-              <div>
-                <button id="formatJsonBtn" type="button" class="ghost mini" style="display:none;">格式化 JSON</button>
-                <button id="addBodyFieldBtn" type="button" style="display:none;">添加字段</button>
-                <button id="toggleBodyModeBtn" type="button" class="ghost mini" style="display:none;">切换为文本模式</button>
+          <div class="form">
+            <label>名称 <input id="apiName" placeholder="例如：获取用户信息" /></label>
+            <label>URL <input id="apiUrl" placeholder="https://example.com/api" /></label>
+            <div class="row">
+              <label>Method
+                <select id="apiMethod">
+                  <option>GET</option>
+                  <option>POST</option>
+                  <option>PUT</option>
+                  <option>PATCH</option>
+                  <option>DELETE</option>
+                  <option>HEAD</option>
+                  <option>OPTIONS</option>
+                </select>
+              </label>
+              <label>分组
+                <select id="apiGroup">
+                  <option value="">未分组</option>
+                </select>
+              </label>
+            </div>
+            <div class="inline-form inline-form-margin">
+              <input id="newGroupName" placeholder="新分组名称" />
+              <button id="addGroupBtn" type="button">添加分组</button>
+            </div>
+            <div class="headers">
+              <div class="label-row">
+                <span>Headers</span>
+                <button id="addHeaderBtn" type="button">添加 Header</button>
               </div>
+              <div id="headerRows"></div>
             </div>
-            <div id="bodyFields" style="display:none;"></div>
-            <textarea id="bodyInput" rows="6" placeholder='{"name":"Codex"}'></textarea>
-          </div>
-          <div class="file-upload-section" id="fileUploadSection" style="display:none;">
-            <div class="label-row">
-              <span>文件上传</span>
-              <button id="addFileBtn" type="button">添加文件</button>
+            <div class="row">
+              <label>Body 类型
+                <select id="bodyType">
+                  <option value="json">JSON</option>
+                  <option value="form-data">FormData</option>
+                  <option value="urlencoded">x-www-form-urlencoded</option>
+                  <option value="raw">Raw Text</option>
+                </select>
+              </label>
             </div>
-            <div id="fileList"></div>
-            <input type="file" id="fileInput" multiple />
+            <div class="body-editor">
+              <div class="label-row">
+                <span>Body 内容</span>
+                <div>
+                  <button id="formatJsonBtn" type="button" class="ghost mini hidden">格式化 JSON</button>
+                  <button id="addBodyFieldBtn" type="button" class="hidden">添加字段</button>
+                  <button id="toggleBodyModeBtn" type="button" class="ghost mini hidden">切换为文本模式</button>
+                </div>
+              </div>
+              <div id="bodyFields" class="hidden"></div>
+              <textarea id="bodyInput" rows="6" placeholder='{"name":"Codex"}'></textarea>
+            </div>
+            <div class="file-upload-section hidden" id="fileUploadSection">
+              <div class="label-row">
+                <span>文件上传</span>
+                <button id="addFileBtn" type="button">添加文件</button>
+              </div>
+              <div id="fileList"></div>
+              <input type="file" id="fileInput" multiple />
+            </div>
           </div>
         </div>
       </div>
-      <div class="block">
-        <div class="block-header">
-          <span>响应结果</span>
-          <div>
-            <button id="copyResponseBtn">复制响应</button>
+      <div class="right-column">
+        <div class="block">
+          <div class="block-header">
+            <span>响应结果</span>
+            <div>
+              <button id="copyResponseBtn">复制响应</button>
+            </div>
           </div>
-        </div>
-        <div class="response">
-          <div id="responseMeta"></div>
-          <pre id="responseBody" class="code"></pre>
+          <div class="response">
+            <div id="responseMeta"></div>
+            <pre id="responseBody" class="code"></pre>
+          </div>
         </div>
       </div>
     </main>
@@ -589,29 +593,35 @@
     
     // form-data 类型时显示文件上传区域
     if (bodyType === "form-data") {
-      elems.fileUploadSection.style.display = "block";
+      elems.fileUploadSection.classList.remove("hidden");
     } else {
-      elems.fileUploadSection.style.display = "none";
+      elems.fileUploadSection.classList.add("hidden");
       selectedFiles = [];
       elems.fileList.innerHTML = "";
     }
     
     // JSON 类型显示格式化按钮
     if (bodyType === "json") {
-      elems.formatJsonBtn.style.display = "inline-block";
-      elems.toggleBodyModeBtn.style.display = "none";
-      elems.addBodyFieldBtn.style.display = "none";
-      elems.bodyFields.style.display = "none";
-      elems.bodyInput.style.display = "block";
+      elems.formatJsonBtn.classList.remove("hidden");
+      elems.toggleBodyModeBtn.classList.add("hidden");
+      elems.addBodyFieldBtn.classList.add("hidden");
+      elems.bodyFields.classList.add("hidden");
+      elems.bodyInput.classList.remove("hidden");
       bodyEditMode = "text";
     }
     // 表单数据支持可视化
     else if (supportsVisual) {
-      elems.formatJsonBtn.style.display = "none";
-      elems.toggleBodyModeBtn.style.display = "inline-block";
-      elems.addBodyFieldBtn.style.display = bodyEditMode === "visual" ? "inline-block" : "none";
-      elems.bodyFields.style.display = bodyEditMode === "visual" ? "block" : "none";
-      elems.bodyInput.style.display = bodyEditMode === "visual" ? "none" : "block";
+      elems.formatJsonBtn.classList.add("hidden");
+      elems.toggleBodyModeBtn.classList.remove("hidden");
+      if (bodyEditMode === "visual") {
+        elems.addBodyFieldBtn.classList.remove("hidden");
+        elems.bodyFields.classList.remove("hidden");
+        elems.bodyInput.classList.add("hidden");
+      } else {
+        elems.addBodyFieldBtn.classList.add("hidden");
+        elems.bodyFields.classList.add("hidden");
+        elems.bodyInput.classList.remove("hidden");
+      }
       
       if (bodyEditMode === "visual") {
         elems.toggleBodyModeBtn.textContent = "切换为文本模式";
@@ -623,11 +633,11 @@
     // 其他类型只显示文本框
     else {
       bodyEditMode = "text";
-      elems.formatJsonBtn.style.display = "none";
-      elems.toggleBodyModeBtn.style.display = "none";
-      elems.addBodyFieldBtn.style.display = "none";
-      elems.bodyFields.style.display = "none";
-      elems.bodyInput.style.display = "block";
+      elems.formatJsonBtn.classList.add("hidden");
+      elems.toggleBodyModeBtn.classList.add("hidden");
+      elems.addBodyFieldBtn.classList.add("hidden");
+      elems.bodyFields.classList.add("hidden");
+      elems.bodyInput.classList.remove("hidden");
     }
   }
 

@@ -2,9 +2,13 @@
   box-sizing: border-box;
 }
 
+html,
 body {
   font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
   margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
   background: #f5f7fb;
   color: #1f2937;
 }
@@ -54,6 +58,12 @@ button.mini {
   margin-left: 0;
 }
 
+#app {
+  width: 100%;
+  height: 100%;
+  display: flex;
+}
+
 .single-column,
 .layout {
   display: flex;
@@ -61,6 +71,99 @@ button.mini {
   gap: 12px;
   padding: 12px;
   align-items: stretch;
+}
+
+.two-column {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 12px;
+  align-items: start;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  margin: 0;
+  min-width: 800px;
+}
+
+.left-column,
+.right-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.left-column .block {
+  flex-shrink: 0;
+}
+
+.right-column .block {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.right-column .response {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+}
+
+.right-column .code {
+  flex: 1;
+  overflow: auto;
+}
+
+@media (max-width: 768px) {
+  .two-column {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  
+  .left-column,
+  .right-column {
+    overflow-y: visible;
+    max-height: none;
+  }
+  
+  .block {
+    max-width: 100%;
+  }
+}
+
+/* 手机屏幕优化 (max-width: 480px) */
+@media (max-width: 480px) {
+  .two-column {
+    gap: 8px;
+    padding: 8px;
+  }
+  
+  .block {
+    padding: 8px;
+  }
+  
+  button {
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+  
+  input,
+  select,
+  textarea {
+    font-size: 14px;
+  }
+}
+
+.hidden {
+  display: none !important;
+}
+
+.inline-form-margin {
+  margin-top: 8px;
 }
 
 .block {
