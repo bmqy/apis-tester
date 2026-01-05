@@ -95,7 +95,7 @@ function openPanel(
 
   const panel = vscode.window.createWebviewPanel(
     "apiTester.panel",
-    "API Tester",
+    "APIs Tester",
     vscode.ViewColumn.Active,
     { enableScripts: true, retainContextWhenHidden: true }
   );
@@ -385,7 +385,7 @@ function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri) {
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https:; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="${styleUri}" />
-    <title>API Tester</title>
+    <title>APIs Tester</title>
     <style>
       html, body, #app {
         width: 100%;
@@ -852,7 +852,7 @@ async function exportData(context: vscode.ExtensionContext) {
     const format = await vscode.window.showQuickPick(
       [
         { label: "Postman Collection v2.1", value: "postman" },
-        { label: "API Tester 原生格式", value: "native" }
+        { label: "APIs Tester 原生格式", value: "native" }
       ],
       { placeHolder: "选择导出格式" }
     );
@@ -1034,9 +1034,9 @@ async function importData(context: vscode.ExtensionContext) {
 function convertToPostman(state: StateShape): any {
   const collection: any = {
     info: {
-      name: "API Tester Export",
+      name: "APIs Tester Export",
       schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-      description: "Exported from API Tester"
+      description: "Exported from APIs Tester"
     },
     item: []
   };
