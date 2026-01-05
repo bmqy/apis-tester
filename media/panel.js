@@ -341,7 +341,7 @@
       url: "",
       method: "GET",
       groupId: selectedGroupId,
-      headers: { "User-Agent": "VSCode-API-Tester" },
+      headers: { "User-Agent": "VSCode-APIs-Tester" },
       bodyType: "json",
       body: "{}",
     };

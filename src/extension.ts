@@ -341,7 +341,7 @@ async function handleRequestWithFiles(api: ApiRequest, filePaths: any[]) {
 
 async function handleBackup(state: StateShape, payload: any) {
   const { url, username, password, path } = payload;
-  const dir = (path || "/api-tester-backup").replace(/\/$/, "");
+  const dir = (path || "/apis-tester-backup").replace(/\/$/, "");
   const filename = "api-tester-backup.json";
   const fullPath = `${dir || ""}/${filename}`;
   const snapshot = normalizeState(state);
@@ -359,12 +359,26 @@ async function handleBackup(state: StateShape, payload: any) {
 
 async function handleRestore(context: vscode.ExtensionContext, payload: any) {
   const { url, username, password, path } = payload;
-  const dir = (path || "/api-tester-backup").replace(/\/$/, "");
+  const dir = (path || "/apis-tester-backup").replace(/\/$/, "");
   const filename = "api-tester-backup.json";
   const fullPath = `${dir || ""}/${filename}`;
   try {
     const client = createClient(url, { username, password });
-    const data = await client.getFileContents(fullPath, { format: "text" });
+    let data;
+    try {
+      // 先尝试从新目录读取
+      data = await client.getFileContents(fullPath, { format: "text" });
+    } catch (e) {
+      // 如果新目录不存在，尝试从旧目录读取（兼容旧版本用户）
+      const oldDir = "/api-tester-backup".replace(/\/$/, "");
+      const oldFullPath = `${oldDir || ""}/${filename}`;
+      try {
+        data = await client.getFileContents(oldFullPath, { format: "text" });
+      } catch {
+        // 两个目录都找不到文件，抛出原始错误
+        throw e;
+      }
+    }
     const parsed: StateShape = normalizeState(JSON.parse(String(data)));
     writeState(context, parsed);
     return { success: true, state: parsed };
@@ -411,14 +425,14 @@ function getNonce() {
 }
 
 async function promptWebdavConfig(context: vscode.ExtensionContext): Promise<any | undefined> {
-  const prev = context.globalState.get<any>(WEBDAV_KEY) ?? { url: "", username: "", password: "", path: "/api-tester-backup" };
+  const prev = context.globalState.get<any>(WEBDAV_KEY) ?? { url: "", username: "", password: "", path: "/apis-tester-backup" };
   const url = await vscode.window.showInputBox({ prompt: "WebDAV URL", value: prev.url, ignoreFocusOut: true });
   if (!url) return;
   const username = await vscode.window.showInputBox({ prompt: "Username", value: prev.username, ignoreFocusOut: true });
   if (username === undefined) return;
   const password = await vscode.window.showInputBox({ prompt: "Password", password: true, value: prev.password, ignoreFocusOut: true });
   if (password === undefined) return;
-  const path = await vscode.window.showInputBox({ prompt: "Backup directory (default /api-tester-backup)", value: prev.path || "/api-tester-backup", ignoreFocusOut: true });
+  const path = await vscode.window.showInputBox({ prompt: "Backup directory (default /apis-tester-backup)", value: prev.path || "/apis-tester-backup", ignoreFocusOut: true });
   if (path === undefined) return;
   const cfg = { url, username, password, path };
   context.globalState.update(WEBDAV_KEY, cfg);
@@ -461,7 +475,7 @@ function getWebdavConfigFromSettings(): any | undefined {
   const url = config?.url?.trim();
   const username = config?.username?.trim();
   const password = config?.password ?? "";
-  const path = config?.path?.trim() || "/api-tester-backup";
+  const path = config?.path?.trim() || "/apis-tester-backup";
   if (!url || !username) return undefined;
   return { url, username, password, path };
 }

@@ -3,7 +3,7 @@
   "displayName": "APIs Tester",
   "author": "bmqy",
   "description": "在 VS Code 中测试 API，支持分组、请求头、Body 预设和 WebDAV 备份",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "publisher": "bmqy",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -44,8 +44,8 @@
         },
         "apiTester.webdav.path": {
           "type": "string",
-          "default": "/api-tester-backup",
-          "description": "备份目录，默认 /api-tester-backup"
+          "default": "/apis-tester-backup",
+          "description": "备份目录，默认 /apis-tester-backup"
         },
         "apiTester.webdav.autoBackup": {
           "type": "boolean",
