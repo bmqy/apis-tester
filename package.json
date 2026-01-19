@@ -3,7 +3,7 @@
   "displayName": "APIs Tester",
   "author": "bmqy",
   "description": "在 VS Code 中测试 API，支持分组、请求头、Body 预设和 WebDAV 备份",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "publisher": "bmqy",
   "license": "MIT",
   "icon": "media/icon.png",

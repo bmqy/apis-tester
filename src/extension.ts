@@ -1,322 +1,322 @@
-import axios, { AxiosRequestConfig, AxiosResponse } from "axios";
-import FormData from "form-data";
-import * as os from "os";
-import * as path from "path";
-import * as vscode from "vscode";
-import { createClient } from "webdav";
+import axios, { AxiosRequestConfig, AxiosResponse } from 'axios'
+import FormData from 'form-data'
+import * as os from 'os'
+import * as path from 'path'
+import * as vscode from 'vscode'
+import { createClient } from 'webdav'
 
-type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS";
+type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'
 
 interface ApiRequest {
-  id: string;
-  name: string;
-  url: string;
-  method: HttpMethod;
-  groupId: string | null;
-  headers: Record<string, string>;
-  bodyType: "json" | "form-data" | "urlencoded" | "raw";
-  body: any;
+  id: string
+  name: string
+  url: string
+  method: HttpMethod
+  groupId: string | null
+  headers: Record<string, string>
+  bodyType: 'json' | 'form-data' | 'urlencoded' | 'raw'
+  body: any
 }
 
 interface ApiGroup {
-  id: string;
-  name: string;
+  id: string
+  name: string
 }
 
 interface StateShape {
-  apis: ApiRequest[];
-  groups: ApiGroup[];
+  apis: ApiRequest[]
+  groups: ApiGroup[]
 }
 
-const STATE_KEY = "apiTester.state";
-const WEBDAV_KEY = "apiTester.webdavConfig";
-const LAST_IMPORT_EXPORT_DIR_KEY = "apiTester.lastImportExportDir";
-let sidebarViewProviderRef: SidebarViewProvider | null = null;
-const panelRefs = new Set<vscode.WebviewPanel>();
+const STATE_KEY = 'apiTester.state'
+const WEBDAV_KEY = 'apiTester.webdavConfig'
+const LAST_IMPORT_EXPORT_DIR_KEY = 'apiTester.lastImportExportDir'
+let sidebarViewProviderRef: SidebarViewProvider | null = null
+const panelRefs = new Set<vscode.WebviewPanel>()
 // 记录每个 API 已打开的面板，避免重复标签
-const panelByApiId = new Map<string, vscode.WebviewPanel>();
+const panelByApiId = new Map<string, vscode.WebviewPanel>()
 
 function generateId() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     // @ts-ignore
-    return crypto.randomUUID();
+    return crypto.randomUUID()
   }
-  return "id-" + Math.random().toString(16).slice(2);
+  return 'id-' + Math.random().toString(16).slice(2)
 }
 
 export function activate(context: vscode.ExtensionContext) {
-  const sidebarProvider = new SidebarViewProvider(context);
-  sidebarViewProviderRef = sidebarProvider;
+  const sidebarProvider = new SidebarViewProvider(context)
+  sidebarViewProviderRef = sidebarProvider
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("apiTester.openPanel", (apiId?: string | { apiId?: string | null; groupId?: string | null } | null) =>
-      openPanel(context, apiId ?? null)
-    ),
-    vscode.commands.registerCommand("apiTester.newApi", () => openPanel(context, null)),
-    vscode.commands.registerCommand("apiTester.backupWebdavCommand", () => backupFromCommand(context)),
-    vscode.commands.registerCommand("apiTester.restoreWebdavCommand", () => restoreFromCommand(context)),
-    vscode.commands.registerCommand("apiTester.openSettings", () => openExtensionSettings()),
-    vscode.commands.registerCommand("apiTester.exportData", () => exportData(context)),
-    vscode.commands.registerCommand("apiTester.importData", () => importData(context)),
-    vscode.window.registerWebviewViewProvider("apiTesterView", sidebarProvider)
-  );
+    vscode.commands.registerCommand('apiTester.openPanel', (apiId?: string | { apiId?: string | null; groupId?: string | null } | null) => openPanel(context, apiId ?? null)),
+    vscode.commands.registerCommand('apiTester.newApi', () => openPanel(context, null)),
+    vscode.commands.registerCommand('apiTester.backupWebdavCommand', () => backupFromCommand(context)),
+    vscode.commands.registerCommand('apiTester.restoreWebdavCommand', () => restoreFromCommand(context)),
+    vscode.commands.registerCommand('apiTester.openSettings', () => openExtensionSettings()),
+    vscode.commands.registerCommand('apiTester.exportData', () => exportData(context)),
+    vscode.commands.registerCommand('apiTester.importData', () => importData(context)),
+    vscode.window.registerWebviewViewProvider('apiTesterView', sidebarProvider),
+  )
 }
 
 export function deactivate() {
   // no-op
 }
 
-function openPanel(
-  context: vscode.ExtensionContext,
-  selected?: string | { apiId?: string | null; groupId?: string | null } | null
-) {
-  const selectedApiId =
-    typeof selected === "string" || selected === null || selected === undefined
-      ? selected ?? null
-      : selected.apiId ?? null;
-  const selectedGroupId =
-    typeof selected === "object" && selected !== null && "groupId" in selected
-      ? selected.groupId ?? null
-      : null;
+function openPanel(context: vscode.ExtensionContext, selected?: string | { apiId?: string | null; groupId?: string | null } | null) {
+  const selectedApiId = typeof selected === 'string' || selected === null || selected === undefined ? (selected ?? null) : (selected.apiId ?? null)
+  const selectedGroupId = typeof selected === 'object' && selected !== null && 'groupId' in selected ? (selected.groupId ?? null) : null
 
-  if (typeof selectedApiId === "string" && selectedApiId) {
-    const existing = panelByApiId.get(selectedApiId);
+  if (typeof selectedApiId === 'string' && selectedApiId) {
+    const existing = panelByApiId.get(selectedApiId)
     if (existing) {
-      existing.reveal(vscode.ViewColumn.Active);
+      existing.reveal(vscode.ViewColumn.Active)
       existing.webview.postMessage({
-        type: "state",
+        type: 'state',
         payload: readState(context),
         selectedApiId,
         selectedGroupId,
-      });
-      return;
+      })
+      return
     }
   }
 
-  const panel = vscode.window.createWebviewPanel(
-    "apiTester.panel",
-    "APIs Tester",
-    vscode.ViewColumn.Active,
-    { enableScripts: true, retainContextWhenHidden: true }
-  );
+  const panel = vscode.window.createWebviewPanel('apiTester.panel', 'APIs Tester', vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true })
 
-  let panelApiId: string | null = selectedApiId ?? null;
-  panelRefs.add(panel);
-  if (panelApiId) panelByApiId.set(panelApiId, panel);
+  let panelApiId: string | null = selectedApiId ?? null
+  panelRefs.add(panel)
+  if (panelApiId) panelByApiId.set(panelApiId, panel)
   panel.onDidDispose(() => {
-    panelRefs.delete(panel);
-    if (panelApiId) panelByApiId.delete(panelApiId);
-  });
+    panelRefs.delete(panel)
+    if (panelApiId) panelByApiId.delete(panelApiId)
+  })
 
-  panel.webview.html = getWebviewHtml(panel.webview, context.extensionUri);
+  panel.webview.html = getWebviewHtml(panel.webview, context.extensionUri)
 
   panel.webview.onDidReceiveMessage(async (message) => {
     switch (message.type) {
-      case "init": {
+      case 'init': {
         panel.webview.postMessage({
-          type: "state",
+          type: 'state',
           payload: readState(context),
           selectedApiId,
           selectedGroupId,
-        });
-        break;
+        })
+        break
       }
-      case "saveApi": {
-        const state = readState(context);
-        const idx = state.apis.findIndex((a) => a.id === message.payload.id);
-        if (idx >= 0) state.apis[idx] = message.payload;
-        else state.apis.push(message.payload);
-        writeState(context, state);
-        broadcastState(state);
-        triggerAutoBackup(context, state);
+      case 'saveApi': {
+        const state = readState(context)
+        const idx = state.apis.findIndex((a) => a.id === message.payload.id)
+        if (idx >= 0) state.apis[idx] = message.payload
+        else state.apis.push(message.payload)
+        writeState(context, state)
+        broadcastState(state)
+        triggerAutoBackup(context, state)
         if (panelApiId && panelApiId !== message.payload.id) {
-          panelByApiId.delete(panelApiId);
+          panelByApiId.delete(panelApiId)
         }
-        panelApiId = message.payload.id;
-        if (panelApiId) panelByApiId.set(panelApiId, panel);
-        break;
+        panelApiId = message.payload.id
+        if (panelApiId) panelByApiId.set(panelApiId, panel)
+        break
       }
-      case "deleteApi": {
-        const state = readState(context);
-        const target = state.apis.find((a) => a.id === message.payload.id);
-        const nextApis = state.apis.filter((a) => a.id !== message.payload.id);
-        let nextGroups = state.groups;
+      case 'deleteApi': {
+        const state = readState(context)
+        const target = state.apis.find((a) => a.id === message.payload.id)
+        const nextApis = state.apis.filter((a) => a.id !== message.payload.id)
+        let nextGroups = state.groups
         if (target?.groupId) {
-          const remain = nextApis.some((a) => a.groupId === target.groupId);
+          const remain = nextApis.some((a) => a.groupId === target.groupId)
           if (!remain) {
-            nextGroups = nextGroups.filter((g) => g.id !== target.groupId);
+            nextGroups = nextGroups.filter((g) => g.id !== target.groupId)
           }
         }
-        const nextState: StateShape = { apis: nextApis, groups: nextGroups };
-        writeState(context, nextState);
-        broadcastState(nextState);
-        triggerAutoBackup(context, nextState);
+        const nextState: StateShape = { apis: nextApis, groups: nextGroups }
+        writeState(context, nextState)
+        broadcastState(nextState)
+        triggerAutoBackup(context, nextState)
         if (panelApiId === message.payload.id) {
-          if (panelApiId) panelByApiId.delete(panelApiId);
-          panelApiId = null;
+          if (panelApiId) panelByApiId.delete(panelApiId)
+          panelApiId = null
         }
-        break;
+        break
       }
-      case "saveGroup": {
-        const state = readState(context);
-        const group = message.payload as ApiGroup;
-        const idx = state.groups.findIndex((g) => g.id === group.id);
-        if (idx >= 0) state.groups[idx] = group;
-        else state.groups.push(group);
-        writeState(context, state);
-        broadcastState(state);
-        triggerAutoBackup(context, state);
-        break;
+      case 'saveGroup': {
+        const state = readState(context)
+        const group = message.payload as ApiGroup
+        const idx = state.groups.findIndex((g) => g.id === group.id)
+        if (idx >= 0) state.groups[idx] = group
+        else state.groups.push(group)
+        writeState(context, state)
+        broadcastState(state)
+        triggerAutoBackup(context, state)
+        break
       }
-      case "deleteGroup": {
-        const state = readState(context);
-        const targetId = (message.payload as ApiGroup).id;
-        state.groups = state.groups.filter((g) => g.id !== targetId);
-        state.apis = state.apis.map((api) => (api.groupId === targetId ? { ...api, groupId: null } : api));
-        writeState(context, state);
-        broadcastState(state);
-        triggerAutoBackup(context, state);
-        break;
+      case 'deleteGroup': {
+        const state = readState(context)
+        const targetId = (message.payload as ApiGroup).id
+        state.groups = state.groups.filter((g) => g.id !== targetId)
+        state.apis = state.apis.map((api) => (api.groupId === targetId ? { ...api, groupId: null } : api))
+        writeState(context, state)
+        broadcastState(state)
+        triggerAutoBackup(context, state)
+        break
       }
-      case "sendRequest": {
-        const result = await handleRequest(message.payload as ApiRequest);
-        panel.webview.postMessage({ type: "response", payload: result });
-        break;
+      case 'sendRequest': {
+        const result = await handleRequest(message.payload as ApiRequest)
+        panel.webview.postMessage({ type: 'response', payload: result })
+        break
       }
-      case "sendRequestWithFiles": {
-        const result = await handleRequestWithFiles(message.payload.api as ApiRequest, message.payload.filePaths);
-        panel.webview.postMessage({ type: "response", payload: result });
-        break;
+      case 'sendRequestWithFiles': {
+        const result = await handleRequestWithFiles(message.payload.api as ApiRequest, message.payload.filePaths)
+        panel.webview.postMessage({ type: 'response', payload: result })
+        break
       }
-      case "backupWebdav": {
-        const result = await handleBackup(readState(context), message.payload);
-        panel.webview.postMessage({ type: "backupResult", payload: result });
-        break;
+      case 'backupWebdav': {
+        const result = await handleBackup(readState(context), message.payload)
+        panel.webview.postMessage({ type: 'backupResult', payload: result })
+        break
       }
-      case "restoreWebdav": {
-        const result = await handleRestore(context, message.payload);
-        panel.webview.postMessage({ type: "restoreResult", payload: result });
-        break;
+      case 'restoreWebdav': {
+        const result = await handleRestore(context, message.payload)
+        panel.webview.postMessage({ type: 'restoreResult', payload: result })
+        break
       }
       default:
-        break;
+        break
     }
-  });
+  })
 }
 
 function readState(context: vscode.ExtensionContext): StateShape {
-  const raw = context.globalState.get<any>(STATE_KEY);
-  return normalizeState(raw);
+  const raw = context.globalState.get<any>(STATE_KEY)
+  return normalizeState(raw)
 }
 
 function writeState(context: vscode.ExtensionContext, state: StateShape) {
-  context.globalState.update(STATE_KEY, normalizeState(state));
+  context.globalState.update(STATE_KEY, normalizeState(state))
 }
 
 function normalizeState(raw: any): StateShape {
-  const groupsRaw = Array.isArray(raw?.groups) ? raw.groups : [];
-  const groups: ApiGroup[] = groupsRaw
-    .map((g: any) => sanitizeGroup(g))
-    .filter((g: ApiGroup | null): g is ApiGroup => Boolean(g));
-  const groupIds = new Set(groups.map((g) => g.id));
+  const groupsRaw = Array.isArray(raw?.groups) ? raw.groups : []
+  const groups: ApiGroup[] = groupsRaw.map((g: any) => sanitizeGroup(g)).filter((g: ApiGroup | null): g is ApiGroup => Boolean(g))
+  const groupIds = new Set(groups.map((g) => g.id))
 
-  const apisRaw = Array.isArray(raw?.apis) ? raw.apis : [];
-  const apis: ApiRequest[] = apisRaw
-    .map((a: any) => sanitizeApi(a, groupIds))
-    .filter((a: ApiRequest | null): a is ApiRequest => Boolean(a));
+  const apisRaw = Array.isArray(raw?.apis) ? raw.apis : []
+  const apis: ApiRequest[] = apisRaw.map((a: any) => sanitizeApi(a, groupIds)).filter((a: ApiRequest | null): a is ApiRequest => Boolean(a))
 
-  return { apis, groups };
+  return { apis, groups }
 }
 
 function sanitizeGroup(group: any): ApiGroup | null {
-  if (!group || typeof group !== "object") return null;
-  const id = typeof group.id === "string" && group.id ? group.id : generateId();
-  const name = typeof group.name === "string" ? group.name : "";
-  return { id, name };
+  if (!group || typeof group !== 'object') return null
+  const id = typeof group.id === 'string' && group.id ? group.id : generateId()
+  const name = typeof group.name === 'string' ? group.name : ''
+  return { id, name }
 }
 
 function sanitizeApi(api: any, groupIds?: Set<string>): ApiRequest | null {
-  if (!api || typeof api !== "object") return null;
-  const allowedMethods: HttpMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
-  const allowedBody: ApiRequest["bodyType"][] = ["json", "form-data", "urlencoded", "raw"];
-  const method = allowedMethods.includes(api.method) ? api.method : "GET";
-  const bodyType = allowedBody.includes(api.bodyType) ? api.bodyType : "json";
-  const headers = api.headers && typeof api.headers === "object" ? api.headers : {};
-  const groupIdRaw = typeof api.groupId === "string" && api.groupId ? api.groupId : null;
-  const groupId = groupIds && groupIdRaw && !groupIds.has(groupIdRaw) ? null : groupIdRaw;
+  if (!api || typeof api !== 'object') return null
+  const allowedMethods: HttpMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
+  const allowedBody: ApiRequest['bodyType'][] = ['json', 'form-data', 'urlencoded', 'raw']
+  const method = allowedMethods.includes(api.method) ? api.method : 'GET'
+  const bodyType = allowedBody.includes(api.bodyType) ? api.bodyType : 'json'
+  const headers = api.headers && typeof api.headers === 'object' ? api.headers : {}
+  const groupIdRaw = typeof api.groupId === 'string' && api.groupId ? api.groupId : null
+  const groupId = groupIds && groupIdRaw && !groupIds.has(groupIdRaw) ? null : groupIdRaw
   return {
-    id: typeof api.id === "string" && api.id ? api.id : generateId(),
-    name: typeof api.name === "string" ? api.name : "",
-    url: typeof api.url === "string" ? api.url : "",
+    id: typeof api.id === 'string' && api.id ? api.id : generateId(),
+    name: typeof api.name === 'string' ? api.name : '',
+    url: typeof api.url === 'string' ? api.url : '',
     method,
     groupId,
     headers,
     bodyType,
-    body: api.body ?? "",
-  };
+    body: api.body ?? '',
+  }
+}
+
+// 对headers中的非ASCII字符进行编码，使其符合HTTP头规范
+function encodeHeaders(headers: Record<string, string>): Record<string, string> {
+  const encoded: Record<string, string> = {}
+  for (const [key, value] of Object.entries(headers)) {
+    // 对header值进行处理，如果包含非ASCII字符则进行URI编码
+    try {
+      // 检查是否包含非ASCII字符
+      if (/[^\x00-\x7F]/.test(value)) {
+        // 使用URI编码处理非ASCII字符
+        encoded[key] = encodeURIComponent(value)
+      } else {
+        encoded[key] = value
+      }
+    } catch (e) {
+      encoded[key] = value
+    }
+  }
+  return encoded
 }
 
 async function handleRequest(api: ApiRequest) {
   const config: AxiosRequestConfig = {
     url: api.url,
     method: api.method,
-    headers: api.headers,
+    headers: encodeHeaders(api.headers),
     validateStatus: () => true,
-  };
+  }
   try {
     switch (api.bodyType) {
-      case "json":
-        config.data = api.body ? JSON.parse(api.body) : undefined;
-        break;
-      case "form-data": {
-        const form = new FormData();
-        const bodyObj = api.body ? JSON.parse(api.body) : {};
-        Object.entries(bodyObj).forEach(([k, v]) => form.append(k, v as any));
-        config.data = form;
-        config.headers = { ...config.headers, ...form.getHeaders() };
-        break;
+      case 'json':
+        config.data = api.body ? JSON.parse(api.body) : undefined
+        break
+      case 'form-data': {
+        const form = new FormData()
+        const bodyObj = api.body ? JSON.parse(api.body) : {}
+        Object.entries(bodyObj).forEach(([k, v]) => form.append(k, v as any))
+        config.data = form
+        config.headers = { ...config.headers, ...form.getHeaders() }
+        break
       }
-      case "urlencoded": {
-        const bodyObj = api.body ? JSON.parse(api.body) : {};
-        const params = new URLSearchParams();
-        Object.entries(bodyObj).forEach(([k, v]) => params.append(k, String(v)));
-        config.data = params.toString();
-        config.headers = { ...config.headers, "Content-Type": "application/x-www-form-urlencoded" };
-        break;
+      case 'urlencoded': {
+        const bodyObj = api.body ? JSON.parse(api.body) : {}
+        const params = new URLSearchParams()
+        Object.entries(bodyObj).forEach(([k, v]) => params.append(k, String(v)))
+        config.data = params.toString()
+        config.headers = { ...config.headers, 'Content-Type': 'application/x-www-form-urlencoded' }
+        break
       }
-      case "raw":
-        config.data = api.body;
-        break;
+      case 'raw':
+        config.data = api.body
+        break
       default:
-        break;
+        break
     }
-    const res: AxiosResponse = await axios(config);
-    return { success: true, status: res.status, statusText: res.statusText, headers: res.headers, data: res.data };
+    const res: AxiosResponse = await axios(config)
+    return { success: true, status: res.status, statusText: res.statusText, headers: res.headers, data: res.data }
   } catch (error: any) {
-    return { success: false, error: error?.message || String(error) };
+    return { success: false, error: error?.message || String(error) }
   }
 }
 
 async function handleRequestWithFiles(api: ApiRequest, filePaths: any[]) {
   try {
     if (!filePaths || filePaths.length === 0) {
-      return { success: false, error: "未选择文件" };
+      return { success: false, error: '未选择文件' }
     }
 
     const config: AxiosRequestConfig = {
       url: api.url,
       method: api.method,
-      headers: api.headers,
+      headers: encodeHeaders(api.headers),
       validateStatus: () => true,
-    };
+    }
 
-    const form = new FormData();
+    const form = new FormData()
 
     // 添加表单字段
     if (api.body) {
       try {
-        const bodyObj = JSON.parse(api.body);
-        Object.entries(bodyObj).forEach(([k, v]) => form.append(k, v as any));
+        const bodyObj = JSON.parse(api.body)
+        Object.entries(bodyObj).forEach(([k, v]) => form.append(k, v as any))
       } catch (e) {
         // 如果解析失败，忽略
       }
@@ -324,73 +324,73 @@ async function handleRequestWithFiles(api: ApiRequest, filePaths: any[]) {
 
     // 添加文件（从 base64 内容转换为 Buffer）
     for (const fileInfo of filePaths) {
-      const fileName = fileInfo.name;
-      const fileBuffer = Buffer.from(fileInfo.content, 'base64');
-      form.append("file", fileBuffer, fileName);
+      const fileName = fileInfo.name
+      const fileBuffer = Buffer.from(fileInfo.content, 'base64')
+      form.append('file', fileBuffer, fileName)
     }
 
-    config.data = form;
-    config.headers = { ...config.headers, ...form.getHeaders() };
+    config.data = form
+    config.headers = { ...config.headers, ...form.getHeaders() }
 
-    const res: AxiosResponse = await axios(config);
-    return { success: true, status: res.status, statusText: res.statusText, headers: res.headers, data: res.data };
+    const res: AxiosResponse = await axios(config)
+    return { success: true, status: res.status, statusText: res.statusText, headers: res.headers, data: res.data }
   } catch (error: any) {
-    return { success: false, error: error?.message || String(error) };
+    return { success: false, error: error?.message || String(error) }
   }
 }
 
 async function handleBackup(state: StateShape, payload: any) {
-  const { url, username, password, path } = payload;
-  const dir = (path || "/apis-tester-backup").replace(/\/$/, "");
-  const filename = "api-tester-backup.json";
-  const fullPath = `${dir || ""}/${filename}`;
-  const snapshot = normalizeState(state);
+  const { url, username, password, path } = payload
+  const dir = (path || '/apis-tester-backup').replace(/\/$/, '')
+  const filename = 'api-tester-backup.json'
+  const fullPath = `${dir || ''}/${filename}`
+  const snapshot = normalizeState(state)
   try {
-    const client = createClient(url, { username, password });
-    if (dir && dir !== "/") {
-      await client.createDirectory(dir, { recursive: true }).catch(() => {});
+    const client = createClient(url, { username, password })
+    if (dir && dir !== '/') {
+      await client.createDirectory(dir, { recursive: true }).catch(() => {})
     }
-    await client.putFileContents(fullPath, JSON.stringify(snapshot, null, 2), { overwrite: true });
-    return { success: true };
+    await client.putFileContents(fullPath, JSON.stringify(snapshot, null, 2), { overwrite: true })
+    return { success: true }
   } catch (error: any) {
-    return { success: false, error: error?.message || String(error) };
+    return { success: false, error: error?.message || String(error) }
   }
 }
 
 async function handleRestore(context: vscode.ExtensionContext, payload: any) {
-  const { url, username, password, path } = payload;
-  const dir = (path || "/apis-tester-backup").replace(/\/$/, "");
-  const filename = "api-tester-backup.json";
-  const fullPath = `${dir || ""}/${filename}`;
+  const { url, username, password, path } = payload
+  const dir = (path || '/apis-tester-backup').replace(/\/$/, '')
+  const filename = 'api-tester-backup.json'
+  const fullPath = `${dir || ''}/${filename}`
   try {
-    const client = createClient(url, { username, password });
-    let data;
+    const client = createClient(url, { username, password })
+    let data
     try {
       // 先尝试从新目录读取
-      data = await client.getFileContents(fullPath, { format: "text" });
+      data = await client.getFileContents(fullPath, { format: 'text' })
     } catch (e) {
       // 如果新目录不存在，尝试从旧目录读取（兼容旧版本用户）
-      const oldDir = "/api-tester-backup".replace(/\/$/, "");
-      const oldFullPath = `${oldDir || ""}/${filename}`;
+      const oldDir = '/api-tester-backup'.replace(/\/$/, '')
+      const oldFullPath = `${oldDir || ''}/${filename}`
       try {
-        data = await client.getFileContents(oldFullPath, { format: "text" });
+        data = await client.getFileContents(oldFullPath, { format: 'text' })
       } catch {
         // 两个目录都找不到文件，抛出原始错误
-        throw e;
+        throw e
       }
     }
-    const parsed: StateShape = normalizeState(JSON.parse(String(data)));
-    writeState(context, parsed);
-    return { success: true, state: parsed };
+    const parsed: StateShape = normalizeState(JSON.parse(String(data)))
+    writeState(context, parsed)
+    return { success: true, state: parsed }
   } catch (error: any) {
-    return { success: false, error: error?.message || String(error) };
+    return { success: false, error: error?.message || String(error) }
   }
 }
 
 function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri) {
-  const nonce = getNonce();
-  const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, "media", "panel.js"));
-  const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, "media", "panel.css"));
+  const nonce = getNonce()
+  const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'panel.js'))
+  const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'panel.css'))
 
   return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -414,206 +414,225 @@ function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri) {
     <div id="app"></div>
     <script nonce="${nonce}" src="${scriptUri}"></script>
   </body>
-</html>`;
+</html>`
 }
 
 function getNonce() {
-  const possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
   return Array.from({ length: 32 })
     .map(() => possible.charAt(Math.floor(Math.random() * possible.length)))
-    .join("");
+    .join('')
 }
 
 async function promptWebdavConfig(context: vscode.ExtensionContext): Promise<any | undefined> {
-  const prev = context.globalState.get<any>(WEBDAV_KEY) ?? { url: "", username: "", password: "", path: "/apis-tester-backup" };
-  const url = await vscode.window.showInputBox({ prompt: "WebDAV URL", value: prev.url, ignoreFocusOut: true });
-  if (!url) return;
-  const username = await vscode.window.showInputBox({ prompt: "Username", value: prev.username, ignoreFocusOut: true });
-  if (username === undefined) return;
-  const password = await vscode.window.showInputBox({ prompt: "Password", password: true, value: prev.password, ignoreFocusOut: true });
-  if (password === undefined) return;
-  const path = await vscode.window.showInputBox({ prompt: "Backup directory (default /apis-tester-backup)", value: prev.path || "/apis-tester-backup", ignoreFocusOut: true });
-  if (path === undefined) return;
-  const cfg = { url, username, password, path };
-  context.globalState.update(WEBDAV_KEY, cfg);
-  return cfg;
+  const prev = context.globalState.get<any>(WEBDAV_KEY) ?? { url: '', username: '', password: '', path: '/apis-tester-backup' }
+  const url = await vscode.window.showInputBox({ prompt: 'WebDAV URL', value: prev.url, ignoreFocusOut: true })
+  if (!url) return
+  const username = await vscode.window.showInputBox({ prompt: 'Username', value: prev.username, ignoreFocusOut: true })
+  if (username === undefined) return
+  const password = await vscode.window.showInputBox({ prompt: 'Password', password: true, value: prev.password, ignoreFocusOut: true })
+  if (password === undefined) return
+  const path = await vscode.window.showInputBox({ prompt: 'Backup directory (default /apis-tester-backup)', value: prev.path || '/apis-tester-backup', ignoreFocusOut: true })
+  if (path === undefined) return
+  const cfg = { url, username, password, path }
+  context.globalState.update(WEBDAV_KEY, cfg)
+  return cfg
 }
 
 async function backupFromCommand(context: vscode.ExtensionContext) {
-  const cfg = await ensureWebdavConfig(context);
-  if (!cfg) return;
-  await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "WebDAV 备份中..." }, async () => {
-    const res = await handleBackup(readState(context), cfg);
-    if (res.success) vscode.window.showInformationMessage("备份成功");
-    else vscode.window.showErrorMessage(`备份失败: ${res.error}`);
-  });
+  const cfg = await ensureWebdavConfig(context)
+  if (!cfg) return
+  await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'WebDAV 备份中...' }, async () => {
+    const res = await handleBackup(readState(context), cfg)
+    if (res.success) vscode.window.showInformationMessage('备份成功')
+    else vscode.window.showErrorMessage(`备份失败: ${res.error}`)
+  })
 }
 
 async function restoreFromCommand(context: vscode.ExtensionContext) {
-  const cfg = await ensureWebdavConfig(context);
-  if (!cfg) return;
-  await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "WebDAV 恢复中..." }, async () => {
-    const res = await handleRestore(context, cfg);
+  const cfg = await ensureWebdavConfig(context)
+  if (!cfg) return
+  await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'WebDAV 恢复中...' }, async () => {
+    const res = await handleRestore(context, cfg)
     if (res.success) {
-      vscode.window.showInformationMessage("恢复成功");
+      vscode.window.showInformationMessage('恢复成功')
       // 刷新侧边栏显示恢复的内容
       if (sidebarViewProviderRef && res.state) {
-        sidebarViewProviderRef.pushState(res.state);
+        sidebarViewProviderRef.pushState(res.state)
       }
       // 广播给所有打开的面板
       if (res.state) {
-        broadcastState(res.state);
+        broadcastState(res.state)
       }
     } else {
-      vscode.window.showErrorMessage(`恢复失败: ${res.error}`);
+      vscode.window.showErrorMessage(`恢复失败: ${res.error}`)
     }
-  });
+  })
 }
 
 function getWebdavConfigFromSettings(): any | undefined {
-  const config = vscode.workspace.getConfiguration("apiTester").get<any>("webdav") as any;
-  const url = config?.url?.trim();
-  const username = config?.username?.trim();
-  const password = config?.password ?? "";
-  const path = config?.path?.trim() || "/apis-tester-backup";
-  if (!url || !username) return undefined;
-  return { url, username, password, path };
+  const config = vscode.workspace.getConfiguration('apiTester').get<any>('webdav') as any
+  const url = config?.url?.trim()
+  const username = config?.username?.trim()
+  const password = config?.password ?? ''
+  const path = config?.path?.trim() || '/apis-tester-backup'
+  if (!url || !username) return undefined
+  return { url, username, password, path }
 }
 
 function resolveWebdavConfig(context: vscode.ExtensionContext): any | undefined {
-  const fromSettings = getWebdavConfigFromSettings();
-  if (fromSettings) return fromSettings;
+  const fromSettings = getWebdavConfigFromSettings()
+  if (fromSettings) return fromSettings
 
-  const stored = context.globalState.get<any>(WEBDAV_KEY);
-  const url = stored?.url?.trim();
-  const username = stored?.username?.trim();
-  const password = stored?.password ?? "";
-  const path = stored?.path?.trim() || "/api-tester-backup";
-  if (!url || !username) return undefined;
-  return { url, username, password, path };
+  const stored = context.globalState.get<any>(WEBDAV_KEY)
+  const url = stored?.url?.trim()
+  const username = stored?.username?.trim()
+  const password = stored?.password ?? ''
+  const path = stored?.path?.trim() || '/api-tester-backup'
+  if (!url || !username) return undefined
+  return { url, username, password, path }
 }
 
 async function ensureWebdavConfig(context: vscode.ExtensionContext): Promise<any | undefined> {
-  const cfg = resolveWebdavConfig(context);
-  if (cfg) return cfg;
-  const action = "Open Settings";
-  const pick = await vscode.window.showWarningMessage("WebDAV config is missing, open settings to configure?", action);
+  const cfg = resolveWebdavConfig(context)
+  if (cfg) return cfg
+  const action = 'Open Settings'
+  const pick = await vscode.window.showWarningMessage('WebDAV config is missing, open settings to configure?', action)
   if (pick === action) {
-    await openExtensionSettings();
+    await openExtensionSettings()
   }
-  return undefined;
+  return undefined
 }
 
 function triggerAutoBackup(context: vscode.ExtensionContext, state: StateShape) {
-  const cfg = getWebdavConfigFromSettings();
-  const auto = vscode.workspace.getConfiguration("apiTester").get<boolean>("webdav.autoBackup", false);
-  if (!auto || !cfg) return;
+  const cfg = getWebdavConfigFromSettings()
+  const auto = vscode.workspace.getConfiguration('apiTester').get<boolean>('webdav.autoBackup', false)
+  if (!auto || !cfg) return
   handleBackup(state, cfg).then((res) => {
     if (res.success) {
-      vscode.window.showInformationMessage("已自动同步到 WebDAV");
+      vscode.window.showInformationMessage('已自动同步到 WebDAV')
     } else {
-      vscode.window.showErrorMessage(`自动同步失败: ${res.error}`);
+      vscode.window.showErrorMessage(`自动同步失败: ${res.error}`)
     }
-  });
+  })
 }
 
 async function openExtensionSettings() {
-  await vscode.commands.executeCommand("workbench.action.openSettings", "@ext:bmqy.apis-tester");
+  await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:bmqy.apis-tester')
 }
 
 function broadcastState(state: StateShape) {
   panelRefs.forEach((p) => {
-    p.webview.postMessage({ type: "state", payload: state });
-  });
-  sidebarViewProviderRef?.pushState(state);
+    p.webview.postMessage({ type: 'state', payload: state })
+  })
+  sidebarViewProviderRef?.pushState(state)
 }
 
 class SidebarViewProvider implements vscode.WebviewViewProvider {
   constructor(private readonly context: vscode.ExtensionContext) {}
-  private view?: vscode.WebviewView;
+  private view?: vscode.WebviewView
 
   resolveWebviewView(webviewView: vscode.WebviewView): void | Thenable<void> {
-    this.view = webviewView;
+    this.view = webviewView
     webviewView.onDidDispose(() => {
-      if (this.view === webviewView) this.view = undefined;
-    });
+      if (this.view === webviewView) this.view = undefined
+    })
 
-    webviewView.webview.options = { enableScripts: true };
-    webviewView.webview.html = this.getViewHtml(webviewView.webview);
+    webviewView.webview.options = { enableScripts: true }
+    webviewView.webview.html = this.getViewHtml(webviewView.webview)
 
     webviewView.webview.onDidReceiveMessage(async (msg) => {
       switch (msg.type) {
-        case "requestState":
-          webviewView.webview.postMessage({ type: "state", payload: readState(this.context) });
-          break;
-        case "action":
-          if (msg.action === "refresh") {
-            webviewView.webview.postMessage({ type: "state", payload: readState(this.context) });
-          } else if (msg.action === "settings") {
-            await openExtensionSettings();
-          } else if (msg.action === "new") {
-            await vscode.commands.executeCommand("apiTester.newApi");
+        case 'requestState':
+          webviewView.webview.postMessage({ type: 'state', payload: readState(this.context) })
+          break
+        case 'action':
+          if (msg.action === 'refresh') {
+            webviewView.webview.postMessage({ type: 'state', payload: readState(this.context) })
+          } else if (msg.action === 'settings') {
+            await openExtensionSettings()
+          } else if (msg.action === 'new') {
+            await vscode.commands.executeCommand('apiTester.newApi')
           }
-          break;
-        case "backup":
-          await backupFromCommand(this.context);
-          break;
-        case "restore":
-          await restoreFromCommand(this.context);
-          break;
-        case "deleteApi": {
-          const state = readState(this.context);
-          const target = state.apis.find((a) => a.id === msg.apiId);
-          const nextApis = state.apis.filter((a) => a.id !== msg.apiId);
-          let nextGroups = state.groups;
+          break
+        case 'backup':
+          await backupFromCommand(this.context)
+          break
+        case 'restore':
+          await restoreFromCommand(this.context)
+          break
+        case 'deleteApi': {
+          const state = readState(this.context)
+          const target = state.apis.find((a) => a.id === msg.apiId)
+          const nextApis = state.apis.filter((a) => a.id !== msg.apiId)
+          let nextGroups = state.groups
           if (target?.groupId) {
-            const remain = nextApis.some((a) => a.groupId === target.groupId);
+            const remain = nextApis.some((a) => a.groupId === target.groupId)
             if (!remain) {
-              nextGroups = nextGroups.filter((g) => g.id !== target.groupId);
+              nextGroups = nextGroups.filter((g) => g.id !== target.groupId)
             }
           }
-          const next: StateShape = { apis: nextApis, groups: nextGroups };
-          writeState(this.context, next);
-          this.pushState(next);
-          broadcastState(next);
-          triggerAutoBackup(this.context, next);
-          panelByApiId.delete(msg.apiId);
-          break;
+          const next: StateShape = { apis: nextApis, groups: nextGroups }
+          writeState(this.context, next)
+          this.pushState(next)
+          broadcastState(next)
+          triggerAutoBackup(this.context, next)
+          panelByApiId.delete(msg.apiId)
+          break
         }
-        case "deleteGroup": {
-          const state = readState(this.context);
+        case 'copyApi': {
+          const state = readState(this.context)
+          const target = state.apis.find((a) => a.id === msg.apiId)
+          if (target) {
+            const copiedApi: ApiRequest = {
+              ...target,
+              id: generateId(),
+              name: `${target.name || target.url} - 副本`,
+            }
+            const next: StateShape = { ...state, apis: [...state.apis, copiedApi] }
+            writeState(this.context, next)
+            this.pushState(next)
+            broadcastState(next)
+            triggerAutoBackup(this.context, next)
+            // 复制完成后打开新API的编辑面板
+            await vscode.commands.executeCommand('apiTester.openPanel', copiedApi.id)
+          }
+          break
+        }
+        case 'deleteGroup': {
+          const state = readState(this.context)
           const next: StateShape = {
             groups: state.groups.filter((g) => g.id !== msg.groupId),
             apis: state.apis.map((api) => (api.groupId === msg.groupId ? { ...api, groupId: null } : api)),
-          };
-          writeState(this.context, next);
-          this.pushState(next);
-          broadcastState(next);
-          triggerAutoBackup(this.context, next);
-          break;
+          }
+          writeState(this.context, next)
+          this.pushState(next)
+          broadcastState(next)
+          triggerAutoBackup(this.context, next)
+          break
         }
-        case "openApi":
-          await vscode.commands.executeCommand("apiTester.openPanel", msg.apiId ?? null);
-          break;
-        case "newInGroup":
-          await vscode.commands.executeCommand("apiTester.openPanel", { apiId: null, groupId: msg.groupId ?? null });
-          break;
+        case 'openApi':
+          await vscode.commands.executeCommand('apiTester.openPanel', msg.apiId ?? null)
+          break
+        case 'newInGroup':
+          await vscode.commands.executeCommand('apiTester.openPanel', { apiId: null, groupId: msg.groupId ?? null })
+          break
         default:
-          break;
+          break
       }
-    });
+    })
 
-    webviewView.webview.postMessage({ type: "state", payload: readState(this.context) });
+    webviewView.webview.postMessage({ type: 'state', payload: readState(this.context) })
   }
 
   pushState(state?: StateShape) {
-    const payload = state ?? readState(this.context);
-    this.view?.webview.postMessage({ type: "state", payload });
+    const payload = state ?? readState(this.context)
+    this.view?.webview.postMessage({ type: 'state', payload })
   }
 
   private getViewHtml(webview: vscode.Webview) {
-    const nonce = getNonce();
-    const csp = `default-src 'none'; img-src ${webview.cspSource} https:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';`;
+    const nonce = getNonce()
+    const csp = `default-src 'none'; img-src ${webview.cspSource} https:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';`
     return `<!DOCTYPE html>
   <html lang="zh-CN">
   <head>
@@ -647,6 +666,8 @@ class SidebarViewProvider implements vscode.WebviewViewProvider {
       .pill { padding: 2px 6px; border-radius: 6px; background: #eef2ff; color: #4338ca; font-size: 12px; margin-right: 6px; }
       .del-btn { border: none; background: transparent; color: #e11d48; cursor: pointer; font-size: 14px; line-height: 1; padding: 2px 4px; }
       .del-btn:hover { color: #b91c1c; }
+      .copy-btn { border: none; background: transparent; color: #7c3aed; cursor: pointer; font-size: 14px; line-height: 1; padding: 2px 4px; }
+      .copy-btn:hover { color: #6d28d9; }
       .new-btn { border: none; background: transparent; color: #2563eb; cursor: pointer; font-size: 14px; padding: 0 4px; }
       .new-btn:hover { color: #1d4ed8; }
       .empty { font-size: 12px; color: #6b7280; text-align: center; padding: 12px 6px; border: 1px dashed #e5e7eb; border-radius: 10px; background: #fff; }
@@ -800,6 +821,15 @@ class SidebarViewProvider implements vscode.WebviewViewProvider {
 
           const actions = document.createElement("div");
           actions.className = "actions";
+          const copy = document.createElement("button");
+          copy.className = "copy-btn";
+          copy.title = "复制接口";
+          copy.textContent = "⧉";
+          copy.onclick = (e) => {
+            e.stopPropagation();
+            vscode.postMessage({ type: "copyApi", apiId: api.id });
+          };
+          actions.appendChild(copy);
           const del = document.createElement("button");
           del.className = "del-btn";
           del.title = "删除接口";
@@ -853,60 +883,60 @@ class SidebarViewProvider implements vscode.WebviewViewProvider {
 
     vscode.postMessage({ type: "requestState" });
   </script>
-  </html>`;
+  </html>`
   }
 }
 
 // ==================== 导出数据功能 ====================
 async function exportData(context: vscode.ExtensionContext) {
   try {
-    const state = readState(context);
-    
+    const state = readState(context)
+
     // 让用户选择导出格式
     const format = await vscode.window.showQuickPick(
       [
-        { label: "Postman Collection v2.1", value: "postman" },
-        { label: "APIs Tester 原生格式", value: "native" }
+        { label: 'Postman Collection v2.1', value: 'postman' },
+        { label: 'APIs Tester 原生格式', value: 'native' },
       ],
-      { placeHolder: "选择导出格式" }
-    );
-    
-    if (!format) return;
-    
-    let exportData: any;
-    let defaultFileName: string;
-    
-    if (format.value === "postman") {
-      exportData = convertToPostman(state);
-      defaultFileName = "api-tester-export-postman.json";
+      { placeHolder: '选择导出格式' },
+    )
+
+    if (!format) return
+
+    let exportData: any
+    let defaultFileName: string
+
+    if (format.value === 'postman') {
+      exportData = convertToPostman(state)
+      defaultFileName = 'api-tester-export-postman.json'
     } else {
-      exportData = state;
-      defaultFileName = "api-tester-export.json";
+      exportData = state
+      defaultFileName = 'api-tester-export.json'
     }
-    
+
     // 让用户选择保存位置（优先使用上次的目录，否则使用桌面）
-    const lastDir = context.globalState.get<string>(LAST_IMPORT_EXPORT_DIR_KEY);
-    const desktopPath = path.join(os.homedir(), "Desktop");
-    const defaultDir = lastDir || desktopPath;
-    const defaultPath = path.join(defaultDir, defaultFileName);
+    const lastDir = context.globalState.get<string>(LAST_IMPORT_EXPORT_DIR_KEY)
+    const desktopPath = path.join(os.homedir(), 'Desktop')
+    const defaultDir = lastDir || desktopPath
+    const defaultPath = path.join(defaultDir, defaultFileName)
     const uri = await vscode.window.showSaveDialog({
       defaultUri: vscode.Uri.file(defaultPath),
-      filters: { "JSON": ["json"] }
-    });
-    
-    if (!uri) return;
-    
+      filters: { JSON: ['json'] },
+    })
+
+    if (!uri) return
+
     // 记录用户选择的目录
-    const selectedDir = path.dirname(uri.fsPath);
-    await context.globalState.update(LAST_IMPORT_EXPORT_DIR_KEY, selectedDir);
-    
+    const selectedDir = path.dirname(uri.fsPath)
+    await context.globalState.update(LAST_IMPORT_EXPORT_DIR_KEY, selectedDir)
+
     // 写入文件
-    const content = JSON.stringify(exportData, null, 2);
-    await vscode.workspace.fs.writeFile(uri, Buffer.from(content, "utf-8"));
-    
-    vscode.window.showInformationMessage(`导出成功: ${uri.fsPath}`);
+    const content = JSON.stringify(exportData, null, 2)
+    await vscode.workspace.fs.writeFile(uri, Buffer.from(content, 'utf-8'))
+
+    vscode.window.showInformationMessage(`导出成功: ${uri.fsPath}`)
   } catch (error: any) {
-    vscode.window.showErrorMessage(`导出失败: ${error?.message || String(error)}`);
+    vscode.window.showErrorMessage(`导出失败: ${error?.message || String(error)}`)
   }
 }
 
@@ -914,133 +944,125 @@ async function exportData(context: vscode.ExtensionContext) {
 async function importData(context: vscode.ExtensionContext) {
   try {
     // 让用户选择文件（优先使用上次的目录，否则使用桌面）
-    const lastDir = context.globalState.get<string>(LAST_IMPORT_EXPORT_DIR_KEY);
-    const desktopPath = path.join(os.homedir(), "Desktop");
-    const defaultDir = lastDir || desktopPath;
+    const lastDir = context.globalState.get<string>(LAST_IMPORT_EXPORT_DIR_KEY)
+    const desktopPath = path.join(os.homedir(), 'Desktop')
+    const defaultDir = lastDir || desktopPath
     const uris = await vscode.window.showOpenDialog({
       canSelectMany: false,
       defaultUri: vscode.Uri.file(defaultDir),
-      filters: { "JSON": ["json"] },
-      openLabel: "选择导入文件"
-    });
-    
-    if (!uris || uris.length === 0) return;
-    
-    const uri = uris[0];
+      filters: { JSON: ['json'] },
+      openLabel: '选择导入文件',
+    })
+
+    if (!uris || uris.length === 0) return
+
+    const uri = uris[0]
     // 记录用户选择的目录
-    const selectedDir = path.dirname(uri.fsPath);
-    await context.globalState.update(LAST_IMPORT_EXPORT_DIR_KEY, selectedDir);
-    const content = await vscode.workspace.fs.readFile(uri);
-    const jsonData = JSON.parse(content.toString());
-    
+    const selectedDir = path.dirname(uri.fsPath)
+    await context.globalState.update(LAST_IMPORT_EXPORT_DIR_KEY, selectedDir)
+    const content = await vscode.workspace.fs.readFile(uri)
+    const jsonData = JSON.parse(content.toString())
+
     // 检测格式
-    let importedState: StateShape;
-    
-    if (jsonData.info && jsonData.info.schema && jsonData.info.schema.includes("postman")) {
+    let importedState: StateShape
+
+    if (jsonData.info && jsonData.info.schema && jsonData.info.schema.includes('postman')) {
       // Postman 格式
-      importedState = convertFromPostman(jsonData);
+      importedState = convertFromPostman(jsonData)
     } else if (jsonData.apis && jsonData.groups) {
       // 原生格式
-      importedState = normalizeState(jsonData);
+      importedState = normalizeState(jsonData)
     } else {
-      throw new Error("无法识别的文件格式");
+      throw new Error('无法识别的文件格式')
     }
-    
+
     // 询问导入方式
     const mode = await vscode.window.showQuickPick(
       [
-        { label: "合并导入", description: "保留现有数据，添加新数据", value: "merge" },
-        { label: "覆盖导入", description: "清空现有数据，替换为导入的数据", value: "replace" }
+        { label: '合并导入', description: '保留现有数据，添加新数据', value: 'merge' },
+        { label: '覆盖导入', description: '清空现有数据，替换为导入的数据', value: 'replace' },
       ],
-      { placeHolder: "选择导入方式" }
-    );
-    
-    if (!mode) return;
+      { placeHolder: '选择导入方式' },
+    )
 
-    const currentState = readState(context);
-    const importedGroupNames = new Set(
-      (importedState.groups || []).map((g) => (g.name || "").trim()).filter((n) => n.length > 0)
-    );
-    const hasGroupInfo = importedGroupNames.size > 0;
+    if (!mode) return
 
-    let finalState: StateShape;
+    const currentState = readState(context)
+    const importedGroupNames = new Set((importedState.groups || []).map((g) => (g.name || '').trim()).filter((n) => n.length > 0))
+    const hasGroupInfo = importedGroupNames.size > 0
 
-    if (mode.value === "merge") {
+    let finalState: StateShape
+
+    if (mode.value === 'merge') {
       if (hasGroupInfo) {
         // 合并到指定分组：按名称匹配已有分组，复用其 id；不存在则创建新分组
-        const nameToExistingId = new Map<string, string>();
+        const nameToExistingId = new Map<string, string>()
         currentState.groups.forEach((g) => {
-          const n = (g.name || "").trim();
-          if (n) nameToExistingId.set(n, g.id);
-        });
+          const n = (g.name || '').trim()
+          if (n) nameToExistingId.set(n, g.id)
+        })
 
-        const adjustedImportedGroups: ApiGroup[] = [];
-        const idMap = new Map<string, string>(); // imported groupId -> target groupId
+        const adjustedImportedGroups: ApiGroup[] = []
+        const idMap = new Map<string, string>() // imported groupId -> target groupId
         importedState.groups.forEach((ig) => {
-          const n = (ig.name || "").trim();
-          const existingId = n ? nameToExistingId.get(n) : undefined;
+          const n = (ig.name || '').trim()
+          const existingId = n ? nameToExistingId.get(n) : undefined
           if (existingId) {
-            idMap.set(ig.id, existingId);
+            idMap.set(ig.id, existingId)
             // 不重复添加分组
           } else {
-            adjustedImportedGroups.push(ig);
-            idMap.set(ig.id, ig.id);
+            adjustedImportedGroups.push(ig)
+            idMap.set(ig.id, ig.id)
           }
-        });
+        })
 
         const adjustedImportedApis = importedState.apis.map((a) => {
           if (a.groupId) {
-            const mapped = idMap.get(a.groupId) || a.groupId;
-            return { ...a, groupId: mapped };
+            const mapped = idMap.get(a.groupId) || a.groupId
+            return { ...a, groupId: mapped }
           }
-          return a;
-        });
+          return a
+        })
 
         finalState = {
           groups: [...currentState.groups, ...adjustedImportedGroups],
           apis: [...currentState.apis, ...adjustedImportedApis],
-        };
+        }
       } else {
         // 无分组信息：对全部数据合并
         finalState = {
           groups: [...currentState.groups, ...importedState.groups],
           apis: [...currentState.apis, ...importedState.apis],
-        };
+        }
       }
     } else {
       if (hasGroupInfo) {
         // 覆盖指定分组：先移除同名分组及其接口，再添加导入分组及接口
-        const toRemoveIds = new Set(
-          currentState.groups
-            .filter((g) => importedGroupNames.has((g.name || "").trim()))
-            .map((g) => g.id)
-        );
-        const remainingGroups = currentState.groups.filter((g) => !toRemoveIds.has(g.id));
-        const remainingApis = currentState.apis.filter((a) => !toRemoveIds.has(a.groupId || ""));
+        const toRemoveIds = new Set(currentState.groups.filter((g) => importedGroupNames.has((g.name || '').trim())).map((g) => g.id))
+        const remainingGroups = currentState.groups.filter((g) => !toRemoveIds.has(g.id))
+        const remainingApis = currentState.apis.filter((a) => !toRemoveIds.has(a.groupId || ''))
 
         finalState = {
           groups: [...remainingGroups, ...importedState.groups],
           apis: [...remainingApis, ...importedState.apis],
-        };
+        }
       } else {
         // 无分组信息：对全部数据覆盖
-        finalState = importedState;
+        finalState = importedState
       }
     }
-    
+
     // 保存状态
-    writeState(context, finalState);
-    
+    writeState(context, finalState)
+
     // 刷新侧边栏和所有面板
-    broadcastState(finalState);
+    broadcastState(finalState)
     // 自动同步到 WebDAV（若开启）
-    triggerAutoBackup(context, finalState);
-    
-    vscode.window.showInformationMessage(
-      `导入成功: ${importedState.groups.length} 个分组, ${importedState.apis.length} 个接口`
-    );
+    triggerAutoBackup(context, finalState)
+
+    vscode.window.showInformationMessage(`导入成功: ${importedState.groups.length} 个分组, ${importedState.apis.length} 个接口`)
   } catch (error: any) {
-    vscode.window.showErrorMessage(`导入失败: ${error?.message || String(error)}`);
+    vscode.window.showErrorMessage(`导入失败: ${error?.message || String(error)}`)
   }
 }
 
@@ -1048,38 +1070,38 @@ async function importData(context: vscode.ExtensionContext) {
 function convertToPostman(state: StateShape): any {
   const collection: any = {
     info: {
-      name: "APIs Tester Export",
-      schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-      description: "Exported from APIs Tester"
+      name: 'APIs Tester Export',
+      schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json',
+      description: 'Exported from APIs Tester',
     },
-    item: []
-  };
-  
+    item: [],
+  }
+
   // 按分组组织
-  const groupMap = new Map<string, ApiGroup>();
-  state.groups.forEach(g => groupMap.set(g.id, g));
-  
+  const groupMap = new Map<string, ApiGroup>()
+  state.groups.forEach((g) => groupMap.set(g.id, g))
+
   // 处理有分组的 API
-  state.groups.forEach(group => {
-    const groupApis = state.apis.filter(api => api.groupId === group.id);
+  state.groups.forEach((group) => {
+    const groupApis = state.apis.filter((api) => api.groupId === group.id)
     if (groupApis.length > 0) {
       const folder: any = {
-        name: group.name || "未命名分组",
-        item: groupApis.map(api => convertApiToPostmanItem(api))
-      };
-      collection.item.push(folder);
+        name: group.name || '未命名分组',
+        item: groupApis.map((api) => convertApiToPostmanItem(api)),
+      }
+      collection.item.push(folder)
     }
-  });
-  
+  })
+
   // 处理未分组的 API
-  const ungroupedApis = state.apis.filter(api => !api.groupId);
+  const ungroupedApis = state.apis.filter((api) => !api.groupId)
   if (ungroupedApis.length > 0) {
-    ungroupedApis.forEach(api => {
-      collection.item.push(convertApiToPostmanItem(api));
-    });
+    ungroupedApis.forEach((api) => {
+      collection.item.push(convertApiToPostmanItem(api))
+    })
   }
-  
-  return collection;
+
+  return collection
 }
 
 function convertApiToPostmanItem(api: ApiRequest): any {
@@ -1088,164 +1110,164 @@ function convertApiToPostmanItem(api: ApiRequest): any {
     request: {
       method: api.method,
       header: Object.entries(api.headers).map(([key, value]) => ({ key, value })),
-      url: api.url
-    }
-  };
-  
+      url: api.url,
+    },
+  }
+
   // 处理请求体
-  if (["POST", "PUT", "PATCH"].includes(api.method)) {
-    if (api.bodyType === "json") {
+  if (['POST', 'PUT', 'PATCH'].includes(api.method)) {
+    if (api.bodyType === 'json') {
       item.request.body = {
-        mode: "raw",
+        mode: 'raw',
         raw: api.body,
-        options: { raw: { language: "json" } }
-      };
-    } else if (api.bodyType === "form-data") {
-      try {
-        const bodyObj = api.body ? JSON.parse(api.body) : {};
-        item.request.body = {
-          mode: "formdata",
-          formdata: Object.entries(bodyObj).map(([key, value]) => ({ key, value, type: "text" }))
-        };
-      } catch {
-        item.request.body = { mode: "raw", raw: api.body };
+        options: { raw: { language: 'json' } },
       }
-    } else if (api.bodyType === "urlencoded") {
+    } else if (api.bodyType === 'form-data') {
       try {
-        const bodyObj = api.body ? JSON.parse(api.body) : {};
+        const bodyObj = api.body ? JSON.parse(api.body) : {}
         item.request.body = {
-          mode: "urlencoded",
-          urlencoded: Object.entries(bodyObj).map(([key, value]) => ({ key, value }))
-        };
+          mode: 'formdata',
+          formdata: Object.entries(bodyObj).map(([key, value]) => ({ key, value, type: 'text' })),
+        }
       } catch {
-        item.request.body = { mode: "raw", raw: api.body };
+        item.request.body = { mode: 'raw', raw: api.body }
+      }
+    } else if (api.bodyType === 'urlencoded') {
+      try {
+        const bodyObj = api.body ? JSON.parse(api.body) : {}
+        item.request.body = {
+          mode: 'urlencoded',
+          urlencoded: Object.entries(bodyObj).map(([key, value]) => ({ key, value })),
+        }
+      } catch {
+        item.request.body = { mode: 'raw', raw: api.body }
       }
     } else {
-      item.request.body = { mode: "raw", raw: api.body };
+      item.request.body = { mode: 'raw', raw: api.body }
     }
   }
-  
-  return item;
+
+  return item
 }
 
 function convertFromPostman(postmanCollection: any): StateShape {
-  const groups: ApiGroup[] = [];
-  const apis: ApiRequest[] = [];
-  
+  const groups: ApiGroup[] = []
+  const apis: ApiRequest[] = []
+
   if (!postmanCollection.item || !Array.isArray(postmanCollection.item)) {
-    return { groups, apis };
+    return { groups, apis }
   }
-  
+
   // 获取 Collection 名称作为默认分组
-  const collectionName = postmanCollection.info?.name || "导入的接口";
-  let defaultGroupId: string | null = null;
-  
+  const collectionName = postmanCollection.info?.name || '导入的接口'
+  let defaultGroupId: string | null = null
+
   // 收集没有文件夹的请求
-  const ungroupedApis: any[] = [];
-  
+  const ungroupedApis: any[] = []
+
   // 处理 Postman item
   postmanCollection.item.forEach((item: any) => {
     if (item.item && Array.isArray(item.item)) {
       // 这是一个文件夹（分组）
-      const groupId = generateId();
+      const groupId = generateId()
       groups.push({
         id: groupId,
-        name: item.name || "未命名分组"
-      });
-      
+        name: item.name || '未命名分组',
+      })
+
       // 处理分组内的请求
       item.item.forEach((subItem: any) => {
-        const api = convertPostmanItemToApi(subItem, groupId);
-        if (api) apis.push(api);
-      });
+        const api = convertPostmanItemToApi(subItem, groupId)
+        if (api) apis.push(api)
+      })
     } else {
       // 这是一个单独的请求，暂存起来
-      ungroupedApis.push(item);
+      ungroupedApis.push(item)
     }
-  });
-  
+  })
+
   // 如果有未分组的请求，创建一个以 Collection 名称命名的分组
   if (ungroupedApis.length > 0) {
-    defaultGroupId = generateId();
+    defaultGroupId = generateId()
     groups.push({
       id: defaultGroupId,
-      name: collectionName
-    });
-    
+      name: collectionName,
+    })
+
     // 将未分组的请求加入到这个默认分组
     ungroupedApis.forEach((item) => {
-      const api = convertPostmanItemToApi(item, defaultGroupId);
-      if (api) apis.push(api);
-    });
+      const api = convertPostmanItemToApi(item, defaultGroupId)
+      if (api) apis.push(api)
+    })
   }
-  
-  return { groups, apis };
+
+  return { groups, apis }
 }
 
 function convertPostmanItemToApi(item: any, groupId: string | null): ApiRequest | null {
-  if (!item.request) return null;
-  
-  const request = item.request;
-  let url = "";
-  
+  if (!item.request) return null
+
+  const request = item.request
+  let url = ''
+
   // 解析 URL
-  if (typeof request.url === "string") {
-    url = request.url;
+  if (typeof request.url === 'string') {
+    url = request.url
   } else if (request.url && request.url.raw) {
-    url = request.url.raw;
+    url = request.url.raw
   }
-  
+
   // 解析 headers
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = {}
   if (Array.isArray(request.header)) {
     request.header.forEach((h: any) => {
       if (h.key && !h.disabled) {
-        headers[h.key] = h.value || "";
+        headers[h.key] = h.value || ''
       }
-    });
+    })
   }
-  
+
   // 解析 body
-  let bodyType: ApiRequest["bodyType"] = "json";
-  let body = "";
-  
+  let bodyType: ApiRequest['bodyType'] = 'json'
+  let body = ''
+
   if (request.body) {
-    const mode = request.body.mode || "raw";
-    
-    if (mode === "raw") {
-      bodyType = "raw";
-      body = request.body.raw || "";
+    const mode = request.body.mode || 'raw'
+
+    if (mode === 'raw') {
+      bodyType = 'raw'
+      body = request.body.raw || ''
       // 如果 raw 看起来像 JSON，设置为 json 类型
-      if (request.body.options?.raw?.language === "json") {
-        bodyType = "json";
+      if (request.body.options?.raw?.language === 'json') {
+        bodyType = 'json'
       }
-    } else if (mode === "formdata") {
-      bodyType = "form-data";
-      const formObj: any = {};
+    } else if (mode === 'formdata') {
+      bodyType = 'form-data'
+      const formObj: any = {}
       if (Array.isArray(request.body.formdata)) {
         request.body.formdata.forEach((f: any) => {
           if (f.key && !f.disabled) {
-            formObj[f.key] = f.value || "";
+            formObj[f.key] = f.value || ''
           }
-        });
+        })
       }
-      body = JSON.stringify(formObj, null, 2);
-    } else if (mode === "urlencoded") {
-      bodyType = "urlencoded";
-      const urlObj: any = {};
+      body = JSON.stringify(formObj, null, 2)
+    } else if (mode === 'urlencoded') {
+      bodyType = 'urlencoded'
+      const urlObj: any = {}
       if (Array.isArray(request.body.urlencoded)) {
         request.body.urlencoded.forEach((u: any) => {
           if (u.key && !u.disabled) {
-            urlObj[u.key] = u.value || "";
+            urlObj[u.key] = u.value || ''
           }
-        });
+        })
       }
-      body = JSON.stringify(urlObj, null, 2);
+      body = JSON.stringify(urlObj, null, 2)
     }
   }
-  
-  const method = (request.method || "GET").toUpperCase() as HttpMethod;
-  
+
+  const method = (request.method || 'GET').toUpperCase() as HttpMethod
+
   return {
     id: generateId(),
     name: item.name || url,
@@ -1254,6 +1276,6 @@ function convertPostmanItemToApi(item: any, groupId: string | null): ApiRequest 
     groupId,
     headers,
     bodyType,
-    body
-  };
+    body,
+  }
 }
