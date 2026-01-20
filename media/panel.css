@@ -4,7 +4,11 @@
 
 html,
 body {
-  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-family:
+    'Segoe UI',
+    system-ui,
+    -apple-system,
+    sans-serif;
   margin: 0;
   padding: 0;
   width: 100%;
@@ -21,7 +25,9 @@ button {
   border-radius: 6px;
   cursor: pointer;
   margin-left: 6px;
-  transition: transform 0.1s ease, box-shadow 0.2s ease;
+  transition:
+    transform 0.1s ease,
+    box-shadow 0.2s ease;
 }
 
 button:hover {
@@ -98,8 +104,7 @@ button.mini {
   min-width: 800px;
 }
 
-.left-column,
-.right-column {
+.left-column {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -111,23 +116,95 @@ button.mini {
   flex-shrink: 0;
 }
 
-.right-column .block {
+.right-column {
   display: flex;
   flex-direction: column;
-  flex: 1;
-}
-
-.right-column .response {
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
   min-height: 0;
   flex: 1;
 }
 
-.right-column .code {
+.right-column .block {
+  display: flex;
+  flex-direction: column;
   flex: 1;
-  overflow: auto;
+  min-height: 0;
+  overflow: hidden;
+  height: 100%;
+  padding: 0;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
+}
+
+.right-column .block .block-header {
+  flex-shrink: 0;
+  padding: 12px 12px 8px 12px;
+  margin-bottom: 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.right-column .block .response {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  height: 100%;
+}
+
+#responseMeta {
+  flex-shrink: 0;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #666;
+  border-bottom: 1px solid #e5e7eb;
+  min-height: 0;
+}
+
+#responseContainer {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+  overflow-x: auto;
+  background: #fafbfc;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+  display: block;
+}
+
+#responseBody {
+  margin: 0;
+  padding: 12px;
+  font-size: 12px;
+  font-family: 'Cascadia Code', Consolas, monospace;
+  line-height: 1.5;
+  word-break: break-all;
+  white-space: pre-wrap;
+  color: #1f2937;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+/* Webkit browsers scrollbar styling */
+#responseContainer::-webkit-scrollbar {
+  width: 12px;
+}
+
+#responseContainer::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 6px;
+}
+
+#responseContainer::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 6px;
+  border: 2px solid #f1f5f9;
+}
+
+#responseContainer::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
 @media (max-width: 768px) {
@@ -135,13 +212,13 @@ button.mini {
     grid-template-columns: 1fr;
     height: auto;
   }
-  
+
   .left-column,
   .right-column {
     overflow-y: visible;
     max-height: none;
   }
-  
+
   .block {
     max-width: 100%;
   }
@@ -153,16 +230,16 @@ button.mini {
     gap: 8px;
     padding: 8px;
   }
-  
+
   .block {
     padding: 8px;
   }
-  
+
   button {
     padding: 4px 8px;
     font-size: 12px;
   }
-  
+
   input,
   select,
   textarea {
@@ -190,8 +267,8 @@ button.mini {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
   font-weight: 600;
+  padding: 12px 12px 0 12px;
 }
 
 .form label {
@@ -214,7 +291,7 @@ textarea {
 }
 
 textarea {
-  font-family: "Cascadia Code", Consolas, monospace;
+  font-family: 'Cascadia Code', Consolas, monospace;
 }
 
 .row {

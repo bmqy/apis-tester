@@ -85,6 +85,16 @@ function openPanel(context: vscode.ExtensionContext, selected?: string | { apiId
   const panel = vscode.window.createWebviewPanel('apiTester.panel', 'APIs Tester', vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true })
 
   let panelApiId: string | null = selectedApiId ?? null
+
+  // Set initial title if opening an existing API
+  if (panelApiId) {
+    const state = readState(context)
+    const api = state.apis.find((a) => a.id === panelApiId)
+    if (api && api.name) {
+      panel.title = api.name
+    }
+  }
+
   panelRefs.add(panel)
   if (panelApiId) panelByApiId.set(panelApiId, panel)
   panel.onDidDispose(() => {
@@ -117,6 +127,7 @@ function openPanel(context: vscode.ExtensionContext, selected?: string | { apiId
           panelByApiId.delete(panelApiId)
         }
         panelApiId = message.payload.id
+        panel.title = message.payload.name || 'Untitled API'
         if (panelApiId) panelByApiId.set(panelApiId, panel)
         break
       }
