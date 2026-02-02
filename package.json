@@ -3,7 +3,7 @@
   "displayName": "APIs Tester",
   "author": "bmqy",
   "description": "在 VS Code 中测试 API，支持分组、请求头、Body 预设和 WebDAV 备份",
-  "version": "0.0.11",
+  "version": "0.0.12",
   "publisher": "bmqy",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -51,6 +51,31 @@
           "type": "boolean",
           "default": false,
           "description": "开启后，每次接口/分组变更后自动备份到 WebDAV"
+        },
+        "apiTester.proxy.enable": {
+          "type": "boolean",
+          "default": false,
+          "description": "是否启用代理"
+        },
+        "apiTester.proxy.host": {
+          "type": "string",
+          "default": "",
+          "description": "代理服务器地址，例如 127.0.0.1"
+        },
+        "apiTester.proxy.port": {
+          "type": "number",
+          "default": 8080,
+          "description": "代理服务器端口"
+        },
+        "apiTester.proxy.username": {
+          "type": "string",
+          "default": "",
+          "description": "代理用户名（可选）"
+        },
+        "apiTester.proxy.password": {
+          "type": "string",
+          "default": "",
+          "description": "代理密码（可选）"
         }
       }
     },
@@ -175,6 +200,8 @@
   "dependencies": {
     "axios": "^1.6.0",
     "form-data": "^4.0.0",
-    "webdav": "^5.6.0"
+    "webdav": "^5.6.0",
+    "http-proxy-agent": "^7.0.0",
+    "https-proxy-agent": "^7.0.0"
   }
 }

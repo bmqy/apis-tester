@@ -159,6 +159,25 @@
               <div id="bodyFields" class="hidden"></div>
               <textarea id="bodyInput" rows="6" placeholder='{"key":"value"}'></textarea>
             </div>
+            <div class="proxy-section">
+              <div class="label-row">
+                <span>代理配置</span>
+              </div>
+              <label class="checkbox-label">
+                <input type="checkbox" id="proxyEnabled" />
+                <span>使用代理</span>
+              </label>
+              <div id="proxyConfigPanel" style="display: none;" class="proxy-config-form">
+                <div class="proxy-row">
+                  <label>代理地址 <input id="proxyHost" placeholder="例如：127.0.0.1" /></label>
+                  <label>代理端口 <input id="proxyPort" type="number" value="8080" placeholder="8080" /></label>
+                </div>
+                <div class="proxy-row">
+                  <label>用户名 <input id="proxyUsername" placeholder="可选" /></label>
+                  <label>密码 <input id="proxyPassword" type="password" placeholder="可选" /></label>
+                </div>
+              </div>
+            </div>
             <div class="file-upload-section hidden" id="fileUploadSection">
               <div class="label-row">
                 <span>文件上传</span>
@@ -212,6 +231,12 @@
     fileList: document.getElementById('fileList'),
     addFileBtn: document.getElementById('addFileBtn'),
     fileInput: document.getElementById('fileInput'),
+    proxyEnabled: document.getElementById('proxyEnabled'),
+    proxyConfigPanel: document.getElementById('proxyConfigPanel'),
+    proxyHost: document.getElementById('proxyHost'),
+    proxyPort: document.getElementById('proxyPort'),
+    proxyUsername: document.getElementById('proxyUsername'),
+    proxyPassword: document.getElementById('proxyPassword'),
   }
 
   let bodyEditMode = 'text' // "text" or "visual"
@@ -275,6 +300,10 @@
 
   elems.toggleBodyModeBtn.addEventListener('click', () => {
     toggleBodyMode()
+  })
+
+  elems.proxyEnabled.addEventListener('change', () => {
+    elems.proxyConfigPanel.style.display = elems.proxyEnabled.checked ? 'block' : 'none'
   })
 
   elems.addFileBtn.addEventListener('click', () => {
@@ -387,6 +416,14 @@
     elems.bodyType.value = api.bodyType || 'json'
     elems.bodyInput.value = api.body ? stringifyBody(api.body) : ''
 
+    // 填充代理配置
+    elems.proxyEnabled.checked = api.proxyEnabled || false
+    elems.proxyHost.value = api.proxyHost || ''
+    elems.proxyPort.value = api.proxyPort || 8080
+    elems.proxyUsername.value = api.proxyUsername || ''
+    elems.proxyPassword.value = api.proxyPassword || ''
+    elems.proxyConfigPanel.style.display = elems.proxyEnabled.checked ? 'block' : 'none'
+
     elems.headerRows.innerHTML = ''
     const entries = Object.entries(api.headers || {})
     if (entries.length === 0) {
@@ -434,7 +471,14 @@
       body = elems.bodyInput.value
     }
 
-    return {
+    // 收集代理配置
+    const proxyEnabled = elems.proxyEnabled.checked
+    const proxyHost = elems.proxyHost.value.trim()
+    const proxyPort = parseInt(elems.proxyPort.value) || 8080
+    const proxyUsername = elems.proxyUsername.value.trim()
+    const proxyPassword = elems.proxyPassword.value.trim()
+
+    const apiObj = {
       id: currentApiId || uid(),
       name: elems.apiName.value.trim(),
       url: elems.apiUrl.value.trim(),
@@ -444,6 +488,17 @@
       bodyType: elems.bodyType.value,
       body: body,
     }
+
+    // 仅在代理启用时才添加代理配置字段
+    if (proxyEnabled && proxyHost) {
+      apiObj.proxyEnabled = true
+      apiObj.proxyHost = proxyHost
+      apiObj.proxyPort = proxyPort
+      if (proxyUsername) apiObj.proxyUsername = proxyUsername
+      if (proxyPassword) apiObj.proxyPassword = proxyPassword
+    }
+
+    return apiObj
   }
 
   function addHeaderRow(key = '', value = '') {

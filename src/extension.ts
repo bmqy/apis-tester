@@ -1,5 +1,7 @@
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios'
 import FormData from 'form-data'
+import { HttpProxyAgent } from 'http-proxy-agent'
+import { HttpsProxyAgent } from 'https-proxy-agent'
 import * as os from 'os'
 import * as path from 'path'
 import * as vscode from 'vscode'
@@ -16,6 +18,11 @@ interface ApiRequest {
   headers: Record<string, string>
   bodyType: 'json' | 'form-data' | 'urlencoded' | 'raw'
   body: any
+  proxyEnabled?: boolean
+  proxyHost?: string
+  proxyPort?: number
+  proxyUsername?: string
+  proxyPassword?: string
 }
 
 interface ApiGroup {
@@ -31,6 +38,7 @@ interface StateShape {
 const STATE_KEY = 'apiTester.state'
 const WEBDAV_KEY = 'apiTester.webdavConfig'
 const LAST_IMPORT_EXPORT_DIR_KEY = 'apiTester.lastImportExportDir'
+const PROXY_CONFIG_KEY = 'apiTester.proxy'
 let sidebarViewProviderRef: SidebarViewProvider | null = null
 const panelRefs = new Set<vscode.WebviewPanel>()
 // 记录每个 API 已打开的面板，避免重复标签
@@ -235,7 +243,8 @@ function sanitizeApi(api: any, groupIds?: Set<string>): ApiRequest | null {
   const headers = api.headers && typeof api.headers === 'object' ? api.headers : {}
   const groupIdRaw = typeof api.groupId === 'string' && api.groupId ? api.groupId : null
   const groupId = groupIds && groupIdRaw && !groupIds.has(groupIdRaw) ? null : groupIdRaw
-  return {
+
+  const sanitized: ApiRequest = {
     id: typeof api.id === 'string' && api.id ? api.id : generateId(),
     name: typeof api.name === 'string' ? api.name : '',
     url: typeof api.url === 'string' ? api.url : '',
@@ -245,6 +254,21 @@ function sanitizeApi(api: any, groupIds?: Set<string>): ApiRequest | null {
     bodyType,
     body: api.body ?? '',
   }
+
+  // 添加代理配置字段
+  if (api.proxyEnabled) {
+    sanitized.proxyEnabled = true
+    sanitized.proxyHost = typeof api.proxyHost === 'string' ? api.proxyHost : ''
+    sanitized.proxyPort = typeof api.proxyPort === 'number' ? api.proxyPort : 8080
+    if (typeof api.proxyUsername === 'string' && api.proxyUsername) {
+      sanitized.proxyUsername = api.proxyUsername
+    }
+    if (typeof api.proxyPassword === 'string' && api.proxyPassword) {
+      sanitized.proxyPassword = api.proxyPassword
+    }
+  }
+
+  return sanitized
 }
 
 // 对headers中的非ASCII字符进行编码，使其符合HTTP头规范
@@ -267,6 +291,43 @@ function encodeHeaders(headers: Record<string, string>): Record<string, string> 
   return encoded
 }
 
+function getProxyConfig(api?: ApiRequest): any | null {
+  // 优先使用API级别的代理配置
+  if (api?.proxyEnabled && api?.proxyHost) {
+    const proxyUrl =
+      api.proxyUsername && api.proxyPassword ? `http://${api.proxyUsername}:${api.proxyPassword}@${api.proxyHost}:${api.proxyPort || 8080}` : `http://${api.proxyHost}:${api.proxyPort || 8080}`
+
+    return {
+      httpAgent: new HttpProxyAgent(proxyUrl),
+      httpsAgent: new HttpsProxyAgent(proxyUrl),
+    }
+  }
+
+  // 使用全局代理配置
+  const config = vscode.workspace.getConfiguration(PROXY_CONFIG_KEY)
+  const enable = config.get<boolean>('enable', false)
+
+  if (!enable) {
+    return null
+  }
+
+  const host = config.get<string>('host', '')
+  const port = config.get<number>('port', 8080)
+  const username = config.get<string>('username', '')
+  const password = config.get<string>('password', '')
+
+  if (!host) {
+    return null
+  }
+
+  const proxyUrl = username && password ? `http://${username}:${password}@${host}:${port}` : `http://${host}:${port}`
+
+  return {
+    httpAgent: new HttpProxyAgent(proxyUrl),
+    httpsAgent: new HttpsProxyAgent(proxyUrl),
+  }
+}
+
 async function handleRequest(api: ApiRequest) {
   const config: AxiosRequestConfig = {
     url: api.url,
@@ -274,6 +335,14 @@ async function handleRequest(api: ApiRequest) {
     headers: encodeHeaders(api.headers),
     validateStatus: () => true,
   }
+
+  // 添加代理配置（支持API级别和全局级别）
+  const proxyConfig = getProxyConfig(api)
+  if (proxyConfig) {
+    config.httpAgent = proxyConfig.httpAgent
+    config.httpsAgent = proxyConfig.httpsAgent
+  }
+
   try {
     switch (api.bodyType) {
       case 'json':
@@ -319,6 +388,13 @@ async function handleRequestWithFiles(api: ApiRequest, filePaths: any[]) {
       method: api.method,
       headers: encodeHeaders(api.headers),
       validateStatus: () => true,
+    }
+
+    // 添加代理配置（支持API级别和全局级别）
+    const proxyConfig = getProxyConfig(api)
+    if (proxyConfig) {
+      config.httpAgent = proxyConfig.httpAgent
+      config.httpsAgent = proxyConfig.httpsAgent
     }
 
     const form = new FormData()
