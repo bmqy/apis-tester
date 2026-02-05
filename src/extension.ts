@@ -16,6 +16,15 @@ interface ApiRequest {
   method: HttpMethod
   groupId: string | null
   headers: Record<string, string>
+  params?: Record<string, string>
+  cookies?: Record<string, string>
+  auth?: {
+    type: 'none' | 'bearer' | 'basic' | 'custom'
+    bearer?: string
+    username?: string
+    password?: string
+    custom?: string
+  }
   bodyType: 'json' | 'form-data' | 'urlencoded' | 'raw'
   body: any
   proxyEnabled?: boolean
@@ -241,6 +250,8 @@ function sanitizeApi(api: any, groupIds?: Set<string>): ApiRequest | null {
   const method = allowedMethods.includes(api.method) ? api.method : 'GET'
   const bodyType = allowedBody.includes(api.bodyType) ? api.bodyType : 'json'
   const headers = api.headers && typeof api.headers === 'object' ? api.headers : {}
+  const params = api.params && typeof api.params === 'object' ? api.params : {}
+  const cookies = api.cookies && typeof api.cookies === 'object' ? api.cookies : {}
   const groupIdRaw = typeof api.groupId === 'string' && api.groupId ? api.groupId : null
   const groupId = groupIds && groupIdRaw && !groupIds.has(groupIdRaw) ? null : groupIdRaw
 
@@ -251,8 +262,34 @@ function sanitizeApi(api: any, groupIds?: Set<string>): ApiRequest | null {
     method,
     groupId,
     headers,
+    cookies: Object.keys(cookies).length > 0 ? cookies : undefined,
     bodyType,
     body: api.body ?? '',
+  }
+
+  // 处理auth配置
+  if (api.auth && typeof api.auth === 'object') {
+    const authType = api.auth.type || 'none'
+    if (authType !== 'none') {
+      sanitized.auth = {
+        type: authType as 'bearer' | 'basic' | 'custom',
+      }
+      if (authType === 'bearer' && typeof api.auth.bearer === 'string') {
+        sanitized.auth.bearer = api.auth.bearer
+      }
+      if (authType === 'basic') {
+        if (typeof api.auth.username === 'string') sanitized.auth.username = api.auth.username
+        if (typeof api.auth.password === 'string') sanitized.auth.password = api.auth.password
+      }
+      if (authType === 'custom' && typeof api.auth.custom === 'string') {
+        sanitized.auth.custom = api.auth.custom
+      }
+    }
+  }
+
+  // 处理params（query参数）
+  if (Object.keys(params).length > 0) {
+    sanitized.params = params
   }
 
   // 添加代理配置字段
@@ -329,10 +366,45 @@ function getProxyConfig(api?: ApiRequest): any | null {
 }
 
 async function handleRequest(api: ApiRequest) {
+  let url = api.url
+
+  // 构建headers，包含auth认证
+  let headers = encodeHeaders(api.headers)
+
+  // 处理认证信息
+  if (api.auth && api.auth.type !== 'none') {
+    if (api.auth.type === 'bearer' && api.auth.bearer) {
+      headers['Authorization'] = `Bearer ${api.auth.bearer}`
+    } else if (api.auth.type === 'basic' && api.auth.username) {
+      const credentials = Buffer.from(`${api.auth.username}:${api.auth.password || ''}`).toString('base64')
+      headers['Authorization'] = `Basic ${credentials}`
+    } else if (api.auth.type === 'custom' && api.auth.custom) {
+      headers['Authorization'] = api.auth.custom
+    }
+  }
+
+  // 处理Cookies，添加到Cookie header
+  if (api.cookies && Object.keys(api.cookies).length > 0) {
+    const cookieString = Object.entries(api.cookies)
+      .map(([key, value]) => `${key}=${value}`)
+      .join('; ')
+    headers['Cookie'] = cookieString
+  }
+
+  // 处理Query Params
+  if (api.params && Object.keys(api.params).length > 0) {
+    const params = new URLSearchParams()
+    Object.entries(api.params).forEach(([key, value]) => {
+      params.append(key, String(value))
+    })
+    const separator = url.includes('?') ? '&' : '?'
+    url = url + separator + params.toString()
+  }
+
   const config: AxiosRequestConfig = {
-    url: api.url,
+    url: url,
     method: api.method,
-    headers: encodeHeaders(api.headers),
+    headers: headers,
     validateStatus: () => true,
   }
 
@@ -377,16 +449,52 @@ async function handleRequest(api: ApiRequest) {
   }
 }
 
+
 async function handleRequestWithFiles(api: ApiRequest, filePaths: any[]) {
   try {
     if (!filePaths || filePaths.length === 0) {
       return { success: false, error: '未选择文件' }
     }
 
+    let url = api.url
+
+    // 构建headers，包含auth认证
+    let headers = encodeHeaders(api.headers)
+
+    // 处理认证信息
+    if (api.auth && api.auth.type !== 'none') {
+      if (api.auth.type === 'bearer' && api.auth.bearer) {
+        headers['Authorization'] = `Bearer ${api.auth.bearer}`
+      } else if (api.auth.type === 'basic' && api.auth.username) {
+        const credentials = Buffer.from(`${api.auth.username}:${api.auth.password || ''}`).toString('base64')
+        headers['Authorization'] = `Basic ${credentials}`
+      } else if (api.auth.type === 'custom' && api.auth.custom) {
+        headers['Authorization'] = api.auth.custom
+      }
+    }
+
+    // 处理Cookies，添加到Cookie header
+    if (api.cookies && Object.keys(api.cookies).length > 0) {
+      const cookieString = Object.entries(api.cookies)
+        .map(([key, value]) => `${key}=${value}`)
+        .join('; ')
+      headers['Cookie'] = cookieString
+    }
+
+    // 处理Query Params
+    if (api.params && Object.keys(api.params).length > 0) {
+      const params = new URLSearchParams()
+      Object.entries(api.params).forEach(([key, value]) => {
+        params.append(key, String(value))
+      })
+      const separator = url.includes('?') ? '&' : '?'
+      url = url + separator + params.toString()
+    }
+
     const config: AxiosRequestConfig = {
-      url: api.url,
+      url: url,
       method: api.method,
-      headers: encodeHeaders(api.headers),
+      headers: headers,
       validateStatus: () => true,
     }
 

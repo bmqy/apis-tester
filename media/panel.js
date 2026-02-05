@@ -106,10 +106,24 @@
             </div>
           </div>
           <div class="form">
-            <label>名称 <input id="apiName" placeholder="例如：获取用户信息" /></label>
-            <label>URL <input id="apiUrl" placeholder="https://example.com/api" /></label>
+            <!-- 基本信息行1: 名称和分组 -->
             <div class="row">
-              <label>Method
+              <label class="full-width">
+                名称 
+                <input id="apiName" placeholder="例如：获取用户信息" />
+              </label>
+              <label class="full-width">
+                分组
+                <select id="apiGroup">
+                  <option value="">未分组</option>
+                </select>
+              </label>
+            </div>
+
+            <!-- 基本信息行2: Method和URL -->
+            <div class="row method-url-row">
+              <label class="method-label">
+                Method
                 <select id="apiMethod">
                   <option>GET</option>
                   <option>POST</option>
@@ -120,45 +134,106 @@
                   <option>OPTIONS</option>
                 </select>
               </label>
-              <label>分组
-                <select id="apiGroup">
-                  <option value="">未分组</option>
-                </select>
+              <label class="full-width">
+                URL 
+                <input id="apiUrl" placeholder="https://example.com/api" />
               </label>
             </div>
+
+            <!-- 添加分组 -->
             <div class="inline-form inline-form-margin">
               <input id="newGroupName" placeholder="新分组名称" />
               <button id="addGroupBtn" type="button">添加分组</button>
             </div>
-            <div class="headers">
-              <div class="label-row">
-                <span>Headers</span>
-                <button id="addHeaderBtn" type="button">添加 Header</button>
+
+            <!-- Tab导航 -->
+            <div class="tabs-container">
+              <div class="tabs-nav">
+                <button class="tab-btn active" data-tab="params">Params</button>
+                <button class="tab-btn" data-tab="body">Body</button>
+                <button class="tab-btn" data-tab="headers">Headers</button>
+                <button class="tab-btn" data-tab="cookie">Cookie</button>
+                <button class="tab-btn" data-tab="auth">Auth</button>
               </div>
-              <div id="headerRows"></div>
-            </div>
-            <div class="row">
-              <label>Body 类型
-                <select id="bodyType">
-                  <option value="json">JSON</option>
-                  <option value="form-data">FormData</option>
-                  <option value="urlencoded">x-www-form-urlencoded</option>
-                  <option value="raw">Raw Text</option>
-                </select>
-              </label>
-            </div>
-            <div class="body-editor">
-              <div class="label-row">
-                <span>Body 内容</span>
-                <div>
-                  <button id="formatJsonBtn" type="button" class="ghost mini hidden">格式化 JSON</button>
-                  <button id="addBodyFieldBtn" type="button" class="hidden">添加字段</button>
-                  <button id="toggleBodyModeBtn" type="button" class="ghost mini hidden">切换为文本模式</button>
+
+              <!-- Params Tab -->
+              <div class="tab-content active" id="params-tab">
+                <div class="label-row">
+                  <span>Query Params</span>
+                  <button id="addParamBtn" type="button">添加参数</button>
+                </div>
+                <div id="paramRows"></div>
+              </div>
+
+              <!-- Body Tab -->
+              <div class="tab-content" id="body-tab">
+                <div class="row">
+                  <label>Body 类型
+                    <select id="bodyType">
+                      <option value="json">JSON</option>
+                      <option value="form-data">FormData</option>
+                      <option value="urlencoded">x-www-form-urlencoded</option>
+                      <option value="raw">Raw Text</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="body-editor">
+                  <div class="label-row">
+                    <span>Body 内容</span>
+                    <div>
+                      <button id="formatJsonBtn" type="button" class="ghost mini hidden">格式化 JSON</button>
+                      <button id="addBodyFieldBtn" type="button" class="hidden">添加字段</button>
+                      <button id="toggleBodyModeBtn" type="button" class="ghost mini hidden">切换为文本模式</button>
+                    </div>
+                  </div>
+                  <div id="bodyFields" class="hidden"></div>
+                  <textarea id="bodyInput" rows="6" placeholder='{"key":"value"}'></textarea>
+                </div>
+                <div class="file-upload-section hidden" id="fileUploadSection">
+                  <div class="label-row">
+                    <span>文件上传</span>
+                    <button id="addFileBtn" type="button">添加文件</button>
+                  </div>
+                  <div id="fileList"></div>
+                  <input type="file" id="fileInput" multiple />
                 </div>
               </div>
-              <div id="bodyFields" class="hidden"></div>
-              <textarea id="bodyInput" rows="6" placeholder='{"key":"value"}'></textarea>
+
+              <!-- Headers Tab -->
+              <div class="tab-content" id="headers-tab">
+                <div class="label-row">
+                  <span>Request Headers</span>
+                  <button id="addHeaderBtn" type="button">添加 Header</button>
+                </div>
+                <div id="headerRows"></div>
+              </div>
+
+              <!-- Cookie Tab -->
+              <div class="tab-content" id="cookie-tab">
+                <div class="label-row">
+                  <span>Cookies</span>
+                  <button id="addCookieBtn" type="button">添加 Cookie</button>
+                </div>
+                <div id="cookieRows"></div>
+              </div>
+
+              <!-- Auth Tab -->
+              <div class="tab-content" id="auth-tab">
+                <div class="auth-type-selector">
+                  <label>认证类型
+                    <select id="authType">
+                      <option value="none">无</option>
+                      <option value="bearer">Bearer Token</option>
+                      <option value="basic">Basic Auth</option>
+                      <option value="custom">自定义Header</option>
+                    </select>
+                  </label>
+                </div>
+                <div id="authContent"></div>
+              </div>
             </div>
+
+            <!-- 代理配置 -->
             <div class="proxy-section">
               <div class="label-row">
                 <span>代理配置</span>
@@ -177,14 +252,6 @@
                   <label>密码 <input id="proxyPassword" type="password" placeholder="可选" /></label>
                 </div>
               </div>
-            </div>
-            <div class="file-upload-section hidden" id="fileUploadSection">
-              <div class="label-row">
-                <span>文件上传</span>
-                <button id="addFileBtn" type="button">添加文件</button>
-              </div>
-              <div id="fileList"></div>
-              <input type="file" id="fileInput" multiple />
             </div>
           </div>
         </div>
@@ -215,8 +282,14 @@
     apiUrl: document.getElementById('apiUrl'),
     apiMethod: document.getElementById('apiMethod'),
     apiGroup: document.getElementById('apiGroup'),
+    addParamBtn: document.getElementById('addParamBtn'),
+    paramRows: document.getElementById('paramRows'),
     addHeaderBtn: document.getElementById('addHeaderBtn'),
     headerRows: document.getElementById('headerRows'),
+    addCookieBtn: document.getElementById('addCookieBtn'),
+    cookieRows: document.getElementById('cookieRows'),
+    authType: document.getElementById('authType'),
+    authContent: document.getElementById('authContent'),
     bodyType: document.getElementById('bodyType'),
     bodyInput: document.getElementById('bodyInput'),
     bodyFields: document.getElementById('bodyFields'),
@@ -242,6 +315,23 @@
   let bodyEditMode = 'text' // "text" or "visual"
   let selectedFiles = [] // 存储选择的文件信息（包含内容）
   let pendingGroupId = null // 待选中的新分组ID
+
+  // Tab 切换功能
+  document.querySelectorAll('.tab-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const tabName = btn.dataset.tab
+      // 移除所有激活状态
+      document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'))
+      document.querySelectorAll('.tab-content').forEach((c) => c.classList.remove('active'))
+      // 激活当前tab
+      btn.classList.add('active')
+      document.getElementById(`${tabName}-tab`).classList.add('active')
+      // 触发body编辑器更新（如果切换到body tab）
+      if (tabName === 'body') {
+        setTimeout(() => updateBodyEditor(), 0)
+      }
+    })
+  })
 
   window.addEventListener('message', (event) => {
     const { type, payload, selectedApiId, selectedGroupId } = event.data
@@ -285,11 +375,17 @@
     elems.newGroupName.value = ''
   })
 
+  elems.addParamBtn.addEventListener('click', () => addParamRow())
   elems.addHeaderBtn.addEventListener('click', () => addHeaderRow())
+  elems.addCookieBtn.addEventListener('click', () => addCookieRow())
 
   elems.bodyType.addEventListener('change', () => {
     updateBodyEditor()
     updateBodyPlaceholder()
+  })
+
+  elems.authType.addEventListener('change', () => {
+    renderAuthContent()
   })
 
   elems.formatJsonBtn.addEventListener('click', () => {
@@ -374,6 +470,9 @@
       method: 'GET',
       groupId: selectedGroupId,
       headers: { 'User-Agent': 'VSCode-APIs-Tester' },
+      params: {},
+      cookies: {},
+      auth: { type: 'none' },
       bodyType: 'json',
       body: '{}',
     }
@@ -424,6 +523,17 @@
     elems.proxyPassword.value = api.proxyPassword || ''
     elems.proxyConfigPanel.style.display = elems.proxyEnabled.checked ? 'block' : 'none'
 
+    // 填充Params
+    elems.paramRows.innerHTML = ''
+    const params = api.params || {}
+    const paramEntries = Object.entries(params)
+    if (paramEntries.length === 0) {
+      addParamRow()
+    } else {
+      paramEntries.forEach(([key, value]) => addParamRow(key, value))
+    }
+
+    // 填充Headers
     elems.headerRows.innerHTML = ''
     const entries = Object.entries(api.headers || {})
     if (entries.length === 0) {
@@ -431,6 +541,21 @@
     } else {
       entries.forEach(([key, value]) => addHeaderRow(key, value))
     }
+
+    // 填充Cookies
+    elems.cookieRows.innerHTML = ''
+    const cookies = api.cookies || {}
+    const cookieEntries = Object.entries(cookies)
+    if (cookieEntries.length === 0) {
+      addCookieRow()
+    } else {
+      cookieEntries.forEach(([key, value]) => addCookieRow(key, value))
+    }
+
+    // 填充Auth
+    const authConfig = api.auth || { type: 'none' }
+    elems.authType.value = authConfig.type || 'none'
+    renderAuthContent(authConfig)
 
     // 更新 body 编辑器
     updateBodyEditor()
@@ -452,6 +577,40 @@
       const value = row.querySelector('.h-val').value.trim()
       if (key) headers[key] = value
     })
+
+    const params = {}
+    elems.paramRows.querySelectorAll('.param-row').forEach((row) => {
+      const key = row.querySelector('.p-key').value.trim()
+      const value = row.querySelector('.p-val').value.trim()
+      if (key) params[key] = value
+    })
+
+    const cookies = {}
+    elems.cookieRows.querySelectorAll('.cookie-row').forEach((row) => {
+      const key = row.querySelector('.c-key').value.trim()
+      const value = row.querySelector('.c-val').value.trim()
+      if (key) cookies[key] = value
+    })
+
+    // 收集Auth配置
+    const authType = elems.authType.value
+    const auth = { type: authType }
+    if (authType === 'bearer') {
+      const tokenInput = document.getElementById('authBearerToken')
+      if (tokenInput) {
+        auth.bearer = tokenInput.value.trim()
+      }
+    } else if (authType === 'basic') {
+      const usernameInput = document.getElementById('authBasicUsername')
+      const passwordInput = document.getElementById('authBasicPassword')
+      if (usernameInput) auth.username = usernameInput.value.trim()
+      if (passwordInput) auth.password = passwordInput.value.trim()
+    } else if (authType === 'custom') {
+      const customInput = document.getElementById('authCustomValue')
+      if (customInput) {
+        auth.custom = customInput.value.trim()
+      }
+    }
 
     // 从表单获取分组ID，确保保留有效的分组引用
     const groupValue = elems.apiGroup.value
@@ -485,6 +644,9 @@
       method: elems.apiMethod.value,
       groupId: groupId,
       headers,
+      params: Object.keys(params).length > 0 ? params : undefined,
+      cookies: Object.keys(cookies).length > 0 ? cookies : undefined,
+      auth: auth.type !== 'none' ? auth : undefined,
       bodyType: elems.bodyType.value,
       body: body,
     }
@@ -499,6 +661,19 @@
     }
 
     return apiObj
+  }
+
+  function addParamRow(key = '', value = '') {
+    const row = document.createElement('div')
+    row.className = 'param-row'
+    row.innerHTML = `
+      <input class="p-key" placeholder="参数名" value="${key}" />
+      <input class="p-val" placeholder="参数值" value="${value}" />
+      <button class="mini ghost">x</button>
+    `
+    const removeBtn = row.querySelector('button')
+    removeBtn.onclick = () => row.remove()
+    elems.paramRows.appendChild(row)
   }
 
   function addHeaderRow(key = '', value = '') {
@@ -518,6 +693,65 @@
     removeBtn.onclick = () => row.remove()
     attachHeaderSuggest(keyInput, suggestBox)
     elems.headerRows.appendChild(row)
+  }
+
+  function addCookieRow(key = '', value = '') {
+    const row = document.createElement('div')
+    row.className = 'cookie-row'
+    row.innerHTML = `
+      <input class="c-key" placeholder="Cookie名" value="${key}" />
+      <input class="c-val" placeholder="Cookie值" value="${value}" />
+      <button class="mini ghost">x</button>
+    `
+    const removeBtn = row.querySelector('button')
+    removeBtn.onclick = () => row.remove()
+    elems.cookieRows.appendChild(row)
+  }
+
+  function renderAuthContent(authConfig = {}) {
+    const type = elems.authType.value || authConfig.type || 'none'
+    elems.authContent.innerHTML = ''
+
+    if (type === 'none') {
+      return
+    }
+
+    if (type === 'bearer') {
+      const div = document.createElement('div')
+      const token = authConfig.bearer || ''
+      div.innerHTML = `
+        <label class="full-width">
+          Bearer Token
+          <input id="authBearerToken" type="password" placeholder="输入Bearer token" value="${token}" />
+        </label>
+      `
+      elems.authContent.appendChild(div)
+    } else if (type === 'basic') {
+      const div = document.createElement('div')
+      const username = authConfig.username || ''
+      const password = authConfig.password || ''
+      div.innerHTML = `
+        <label class="full-width">
+          用户名
+          <input id="authBasicUsername" placeholder="用户名" value="${username}" />
+        </label>
+        <label class="full-width">
+          密码
+          <input id="authBasicPassword" type="password" placeholder="密码" value="${password}" />
+        </label>
+      `
+      elems.authContent.appendChild(div)
+    } else if (type === 'custom') {
+      const div = document.createElement('div')
+      const customValue = authConfig.custom || ''
+      div.innerHTML = `
+        <label class="full-width">
+          自定义认证值
+          <input id="authCustomValue" placeholder="例如：Authorization: Custom xxx" value="${customValue}" />
+        </label>
+      `
+      elems.authContent.appendChild(div)
+    }
   }
 
   function attachHeaderSuggest(input, listEl) {

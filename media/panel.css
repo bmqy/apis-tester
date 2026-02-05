@@ -301,8 +301,48 @@ textarea {
   align-items: end;
 }
 
+/* Method 和 URL 行特殊布局 */
+.method-url-row {
+  grid-template-columns: auto 1fr;
+}
+
+.row > label {
+  margin-bottom: 0;
+}
+
+.row > label:first-child {
+  grid-column: 1;
+}
+
+.method-label {
+  width: auto !important;
+  grid-column: auto !important;
+  display: flex !important;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.method-label select {
+  width: auto;
+  min-width: 100px;
+  margin-top: 0;
+}
+
+/* 两列布局 */
+.row.two-column {
+  grid-template-columns: 1fr 1fr;
+}
+
 .full {
   grid-column: 1 / -1;
+}
+
+.full-width {
+  width: 100% !important;
+}
+
+.method-url-row .full-width {
+  grid-column: auto;
 }
 
 .headers .label-row {
@@ -312,16 +352,17 @@ textarea {
   margin: 10px 0 6px;
 }
 
-.header-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr auto;
-  gap: 8px;
-  margin-bottom: 6px;
+.label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 10px 0 6px;
 }
 
 .h-key-wrap {
   position: relative;
   width: 100%;
+  z-index: 1;
 }
 
 .header-suggest {
@@ -336,7 +377,7 @@ textarea {
   max-height: 220px;
   overflow-y: auto;
   display: none;
-  z-index: 5;
+  z-index: 1000;
 }
 
 .header-suggest.open {
@@ -353,25 +394,6 @@ textarea {
 .suggest-item.active {
   background: #eff6ff;
   color: #1d4ed8;
-}
-
-.header-row .mini {
-  border: none;
-  background: transparent;
-  color: #dc2626;
-  font-size: 16px;
-  padding: 2px 4px;
-  line-height: 1;
-  box-shadow: none;
-  transform: none;
-  transition: none;
-}
-
-.header-row .mini:hover {
-  background: transparent;
-  color: #dc2626;
-  box-shadow: none;
-  transform: none;
 }
 
 .body-editor {
@@ -498,6 +520,159 @@ textarea {
   height: 1px !important;
   opacity: 0 !important;
   pointer-events: none !important;
+}
+
+.proxy-section {
+  margin-top: 12px;
+  padding: 12px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+/* ===== Tabs 样式 ===== */
+.tabs-container {
+  margin-top: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  overflow: visible;
+  position: relative;
+}
+
+.tabs-nav {
+  display: flex;
+  background: #f8fafc;
+  border-bottom: 2px solid #e5e7eb;
+  gap: 0;
+  padding: 0;
+  margin: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  border-radius: 8px 8px 0 0;
+}
+
+.tab-btn {
+  flex: 0 0 auto;
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+  margin: 0;
+  margin-left: 0;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  box-shadow: none;
+  transform: none;
+  border-radius: 0;
+}
+
+.tab-btn:hover {
+  color: #374151;
+  background: #f1f5f9;
+  box-shadow: none;
+  transform: none;
+}
+
+.tab-btn.active {
+  color: #2f80ed;
+  background: #ffffff;
+  border-bottom-color: #2f80ed;
+  font-weight: 600;
+}
+
+.tabs-nav::-webkit-scrollbar {
+  height: 4px;
+}
+
+.tabs-nav::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+.tabs-nav::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 2px;
+}
+
+.tabs-nav::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.tab-content {
+  display: none;
+  padding: 12px;
+  animation: fadeIn 0.2s ease;
+  position: relative;
+  overflow: visible;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Params、Headers、Cookies、Auth 共通行样式 */
+.param-row,
+.header-row,
+.cookie-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.param-row .mini,
+.header-row .mini,
+.cookie-row .mini {
+  border: none;
+  background: transparent;
+  color: #dc2626;
+  font-size: 16px;
+  padding: 2px 4px;
+  line-height: 1;
+  box-shadow: none;
+  transform: none;
+  transition: none;
+}
+
+.param-row .mini:hover,
+.header-row .mini:hover,
+.cookie-row .mini:hover {
+  background: transparent;
+  color: #dc2626;
+  box-shadow: none;
+  transform: none;
+}
+
+.auth-type-selector {
+  margin-bottom: 12px;
+}
+
+.auth-type-selector label {
+  margin-bottom: 0;
+}
+
+#authContent {
+  margin-top: 8px;
+  padding: 8px 0;
+}
+
+#authContent > div {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .proxy-section {
