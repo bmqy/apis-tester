@@ -333,16 +333,55 @@ textarea {
   grid-template-columns: 1fr 1fr;
 }
 
-.full {
-  grid-column: 1 / -1;
-}
-
 .full-width {
   width: 100% !important;
 }
 
 .method-url-row .full-width {
   grid-column: auto;
+}
+
+/* 分组输入框样式 */
+.group-input-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.group-suggest {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.1);
+  max-height: 220px;
+  overflow-y: auto;
+  display: none;
+  z-index: 1000;
+}
+
+.group-suggest.open {
+  display: block;
+}
+
+.group-suggest-item {
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.group-suggest-item:last-child {
+  border-bottom: none;
+}
+
+.group-suggest-item:hover,
+.group-suggest-item.active {
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 500;
 }
 
 .headers .label-row {

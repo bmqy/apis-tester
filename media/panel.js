@@ -114,9 +114,10 @@
               </label>
               <label class="full-width">
                 分组
-                <select id="apiGroup">
-                  <option value="">未分组</option>
-                </select>
+                <div class="group-input-wrapper">
+                  <input id="apiGroupInput" type="text" placeholder="选择分组或输入新分组名称" />
+                  <div class="group-suggest"></div>
+                </div>
               </label>
             </div>
 
@@ -138,12 +139,6 @@
                 URL 
                 <input id="apiUrl" placeholder="https://example.com/api" />
               </label>
-            </div>
-
-            <!-- 添加分组 -->
-            <div class="inline-form inline-form-margin">
-              <input id="newGroupName" placeholder="新分组名称" />
-              <button id="addGroupBtn" type="button">添加分组</button>
             </div>
 
             <!-- Tab导航 -->
@@ -276,12 +271,11 @@
   `
 
   const elems = {
-    newGroupName: document.getElementById('newGroupName'),
-    addGroupBtn: document.getElementById('addGroupBtn'),
     apiName: document.getElementById('apiName'),
     apiUrl: document.getElementById('apiUrl'),
     apiMethod: document.getElementById('apiMethod'),
-    apiGroup: document.getElementById('apiGroup'),
+    apiGroupInput: document.getElementById('apiGroupInput'),
+    groupSuggest: document.querySelector('.group-suggest'),
     addParamBtn: document.getElementById('addParamBtn'),
     paramRows: document.getElementById('paramRows'),
     addHeaderBtn: document.getElementById('addHeaderBtn'),
@@ -314,7 +308,6 @@
 
   let bodyEditMode = 'text' // "text" or "visual"
   let selectedFiles = [] // 存储选择的文件信息（包含内容）
-  let pendingGroupId = null // 待选中的新分组ID
 
   // Tab 切换功能
   document.querySelectorAll('.tab-btn').forEach((btn) => {
@@ -366,14 +359,84 @@
     }
   })
 
-  elems.addGroupBtn.addEventListener('click', () => {
-    const name = elems.newGroupName.value.trim()
-    if (!name) return
-    const group = { id: uid(), name }
-    pendingGroupId = group.id // 记录新分组ID，待状态更新后选中
-    vscode.postMessage({ type: 'saveGroup', payload: group })
-    elems.newGroupName.value = ''
+  // 分组输入框自动建议功能
+  let groupActiveIndex = -1
+  const groupInputElem = elems.apiGroupInput
+  const groupSuggestBox = elems.groupSuggest
+
+  const hideGroupSuggest = () => {
+    groupSuggestBox.classList.remove('open')
+    groupSuggestBox.innerHTML = ''
+    groupActiveIndex = -1
+  }
+
+  const renderGroupSuggest = () => {
+    const keyword = (groupInputElem.value || '').trim().toLowerCase()
+    let groupsToShow = state.groups
+    
+    if (keyword) {
+      groupsToShow = state.groups.filter((g) => g.name.toLowerCase().includes(keyword))
+    }
+
+    if (groupsToShow.length === 0) {
+      hideGroupSuggest()
+      return
+    }
+
+    groupSuggestBox.innerHTML = ''
+    groupsToShow.forEach((g, idx) => {
+      const item = document.createElement('div')
+      item.className = 'group-suggest-item'
+      item.textContent = g.name
+      item.dataset.groupId = g.id
+      item.dataset.index = String(idx)
+      item.onclick = (e) => {
+        e.preventDefault()
+        groupInputElem.value = g.name
+        groupInputElem.dataset.groupId = g.id
+        hideGroupSuggest()
+        groupInputElem.focus()
+      }
+      groupSuggestBox.appendChild(item)
+    })
+    groupActiveIndex = 0
+    groupSuggestBox.classList.add('open')
+  }
+
+  groupInputElem.addEventListener('input', renderGroupSuggest)
+  groupInputElem.addEventListener('focus', renderGroupSuggest)
+  
+  groupInputElem.addEventListener('keydown', (e) => {
+    if (!groupSuggestBox.classList.contains('open')) return
+    const total = groupSuggestBox.children.length
+    if (e.key === 'ArrowDown') {
+      groupActiveIndex = groupActiveIndex < total - 1 ? groupActiveIndex + 1 : 0
+      Array.from(groupSuggestBox.children).forEach((child, idx) => {
+        child.classList.toggle('active', idx === groupActiveIndex)
+      })
+      e.preventDefault()
+    } else if (e.key === 'ArrowUp') {
+      groupActiveIndex = groupActiveIndex > 0 ? groupActiveIndex - 1 : total - 1
+      Array.from(groupSuggestBox.children).forEach((child, idx) => {
+        child.classList.toggle('active', idx === groupActiveIndex)
+      })
+      e.preventDefault()
+    } else if (e.key === 'Enter') {
+      const node = groupSuggestBox.children[groupActiveIndex]
+      if (node) {
+        const groupId = node.dataset.groupId
+        const groupName = node.textContent
+        groupInputElem.value = groupName
+        groupInputElem.dataset.groupId = groupId
+        hideGroupSuggest()
+        e.preventDefault()
+      }
+    } else if (e.key === 'Escape') {
+      hideGroupSuggest()
+    }
   })
+
+  groupInputElem.addEventListener('blur', () => setTimeout(hideGroupSuggest, 120))
 
   elems.addParamBtn.addEventListener('click', () => addParamRow())
   elems.addHeaderBtn.addEventListener('click', () => addHeaderRow())
@@ -479,26 +542,8 @@
   }
 
   function renderGroups() {
-    // 保留当前选中的分组ID
-    const currentSelectedGroupId = elems.apiGroup.value
-
-    elems.apiGroup.innerHTML = `<option value="">未分组</option>`
-    state.groups.forEach((g) => {
-      const opt = document.createElement('option')
-      opt.value = g.id
-      opt.textContent = g.name || '未命名分组'
-      elems.apiGroup.appendChild(opt)
-    })
-
-    // 如果有待选中的新分组，优先选中它
-    if (pendingGroupId && state.groups.some((g) => g.id === pendingGroupId)) {
-      elems.apiGroup.value = pendingGroupId
-      pendingGroupId = null // 清除标记
-    }
-    // 否则恢复之前选中的分组
-    else if (currentSelectedGroupId && state.groups.some((g) => g.id === currentSelectedGroupId)) {
-      elems.apiGroup.value = currentSelectedGroupId
-    }
+    // 分组列表已通过state.groups保存在内存中，
+    // 分组输入框通过建议框展示，无需额外渲染
   }
 
   function fillApiForm(api) {
@@ -509,9 +554,17 @@
     elems.apiName.value = api.name || ''
     elems.apiUrl.value = api.url || ''
     elems.apiMethod.value = api.method || 'GET'
-    // 确保设置的分组ID在当前可用的分组中存在
-    const validGroupId = api.groupId && state.groups.some((g) => g.id === api.groupId) ? api.groupId : ''
-    elems.apiGroup.value = validGroupId
+    
+    // 填充分组
+    if (api.groupId && state.groups.some((g) => g.id === api.groupId)) {
+      const group = state.groups.find((g) => g.id === api.groupId)
+      elems.apiGroupInput.value = group?.name || ''
+      elems.apiGroupInput.dataset.groupId = api.groupId
+    } else {
+      elems.apiGroupInput.value = ''
+      delete elems.apiGroupInput.dataset.groupId
+    }
+    
     elems.bodyType.value = api.bodyType || 'json'
     elems.bodyInput.value = api.body ? stringifyBody(api.body) : ''
 
@@ -612,9 +665,25 @@
       }
     }
 
-    // 从表单获取分组ID，确保保留有效的分组引用
-    const groupValue = elems.apiGroup.value
-    const groupId = groupValue && typeof groupValue === 'string' && groupValue.trim() !== '' ? groupValue.trim() : null
+    // 从表单获取分组ID
+    let groupId = elems.apiGroupInput.dataset.groupId || null
+    const groupInputValue = elems.apiGroupInput.value.trim()
+    
+    // 如果输入了分组名但没有对应的groupId，说明是新分组
+    if (groupInputValue && !groupId) {
+      // 检查是否已存在这个分组
+      const existingGroup = state.groups.find((g) => g.name === groupInputValue)
+      if (existingGroup) {
+        groupId = existingGroup.id
+      } else {
+        // 创建新分组
+        const newGroup = { id: uid(), name: groupInputValue }
+        vscode.postMessage({ type: 'saveGroup', payload: newGroup })
+        groupId = newGroup.id
+      }
+    } else if (!groupInputValue) {
+      groupId = null
+    }
 
     // 收集 body 数据
     let body = ''
