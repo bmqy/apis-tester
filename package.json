@@ -18,6 +18,22 @@
     "Debuggers",
     "Testing"
   ],
+  "keywords": [
+    "api",
+    "test",
+    "http",
+    "request",
+    "postman",
+    "webdav",
+    "sync",
+    "proxy",
+    "rest",
+    "testing",
+    "debugger",
+    "apis-tester",
+    "interface",
+    "collection"
+  ],
   "activationEvents": [
     "onCommand:apiTester.openPanel",
     "onView:apiTesterView"
