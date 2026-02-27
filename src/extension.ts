@@ -108,7 +108,7 @@ function openPanel(context: vscode.ExtensionContext, selected?: string | { apiId
     const state = readState(context)
     const api = state.apis.find((a) => a.id === panelApiId)
     if (api && api.name) {
-      panel.title = api.name
+      panel.title = `APIS-TESTER: ${api.name}`
     }
   }
 
@@ -144,7 +144,7 @@ function openPanel(context: vscode.ExtensionContext, selected?: string | { apiId
           panelByApiId.delete(panelApiId)
         }
         panelApiId = message.payload.id
-        panel.title = message.payload.name || 'Untitled API'
+        panel.title = `APIS-TESTER: ${message.payload.name || 'Untitled API'}`
         if (panelApiId) panelByApiId.set(panelApiId, panel)
         break
       }

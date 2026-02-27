@@ -135,6 +135,10 @@
 
 ## 📝 更新记录
 
+### v0.0.14
+
+- 🎨 优化打开的标签标题，增加`APIS-TESTER: `前缀
+
 ### v0.0.13
 
 - ✨ 更新支持 Params、Body、Headers、Cookie、Auth，并优化布局；
