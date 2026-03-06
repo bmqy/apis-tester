@@ -3,7 +3,7 @@
   "displayName": "APIs Tester",
   "author": "bmqy",
   "description": "在 VS Code 中测试 API，支持分组、请求头、Body 预设和 WebDAV 备份",
-  "version": "0.0.14",
+  "version": "0.0.15",
   "publisher": "bmqy",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -211,6 +211,7 @@
   "devDependencies": {
     "@types/node": "^20.10.0",
     "@types/vscode": "^1.84.0",
+    "@types/ws": "^8.18.1",
     "@vscode/vsce": "^3.7.1",
     "esbuild": "^0.27.2",
     "npm-run-all": "^4.1.5",
@@ -219,8 +220,9 @@
   "dependencies": {
     "axios": "^1.6.0",
     "form-data": "^4.0.0",
-    "webdav": "^5.6.0",
     "http-proxy-agent": "^7.0.0",
-    "https-proxy-agent": "^7.0.0"
+    "https-proxy-agent": "^7.0.0",
+    "webdav": "^5.6.0",
+    "ws": "^8.14.0"
   }
 }

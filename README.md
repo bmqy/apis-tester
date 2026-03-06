@@ -11,7 +11,7 @@
 
 ### 📡 API 测试
 
-- 支持所有常见 HTTP 方法：GET、POST、PUT、PATCH、DELETE、HEAD、OPTIONS
+- 支持所有常见 HTTP 方法：GET、POST、PUT、PATCH、DELETE、HEAD、OPTIONS、WEBSOCKET
 - 可视化配置请求参数：URL、Headers、Body
 - 多种 Body 格式支持：JSON、Form-data、x-www-form-urlencoded、Raw
 - 实时查看响应结果，支持复制粘贴
@@ -134,6 +134,11 @@
 - 安装：在 VS Code 执行 `code --install-extension <文件名>.vsix`。
 
 ## 📝 更新记录
+
+### v0.0.15
+
+- ✨ 新增支持`websocket`连接
+- 🎨 优化发送`api`请求中时可取消
 
 ### v0.0.14
 

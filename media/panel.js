@@ -133,12 +133,21 @@
                   <option>DELETE</option>
                   <option>HEAD</option>
                   <option>OPTIONS</option>
+                  <option>WebSocket</option>
                 </select>
               </label>
               <label class="full-width">
                 URL 
-                <input id="apiUrl" placeholder="https://example.com/api" />
+                <input id="apiUrl" placeholder="https://example.com/api 或 ws://example.com/socket" />
               </label>
+            </div>
+
+            <!-- WebSocket 消息区域 (默认隐藏) -->
+            <div id="wsMessageSection" style="display: none; margin-top: 10px; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+              <div class="label-row">
+                <span>WebSocket 消息</span>
+              </div>
+              <textarea id="wsMessage" rows="4" placeholder="输入要发送的消息（可选）&#10;格式支持：JSON、文本等"></textarea>
             </div>
 
             <!-- Tab导航 -->
@@ -304,10 +313,12 @@
     proxyPort: document.getElementById('proxyPort'),
     proxyUsername: document.getElementById('proxyUsername'),
     proxyPassword: document.getElementById('proxyPassword'),
+    wsMessage: document.getElementById('wsMessage'),
   }
 
   let bodyEditMode = 'text' // "text" or "visual"
   let selectedFiles = [] // 存储选择的文件信息（包含内容）
+  let currentConnId = null // 追踪当前活跃请求ID（WebSocket连接ID或HTTP请求ID）
 
   // Tab 切换功能
   document.querySelectorAll('.tab-btn').forEach((btn) => {
@@ -353,6 +364,9 @@
         break
       case 'response':
         handleResponse(payload)
+        break
+      case 'wsMessage':
+        handleWebSocketMessage(payload)
         break
       default:
         break
@@ -442,6 +456,10 @@
   elems.addHeaderBtn.addEventListener('click', () => addHeaderRow())
   elems.addCookieBtn.addEventListener('click', () => addCookieRow())
 
+  elems.apiMethod.addEventListener('change', () => {
+    updateUIforMethod()
+  })
+
   elems.bodyType.addEventListener('change', () => {
     updateBodyEditor()
     updateBodyPlaceholder()
@@ -491,6 +509,15 @@
   })
 
   elems.sendBtn.addEventListener('click', () => {
+    // 如果有活跃的连接（HTTP或WebSocket），点击按钮则停止
+    if (currentConnId) {
+      vscode.postMessage({ type: 'stopRequest' })
+      currentConnId = null
+      elems.sendBtn.disabled = false
+      elems.sendBtn.textContent = '发送/保存'
+      return
+    }
+
     const api = collectApiForm()
     if (!api.url) {
       elems.responseMeta.textContent = '请先填写接口 URL'
@@ -501,9 +528,13 @@
       api.name = api.url
     }
 
-    // 禁用按钮，显示加载状态
-    elems.sendBtn.disabled = true
-    elems.sendBtn.textContent = '发送中...'
+    // 生成唯一的请求ID
+    const requestId = generateRequestId()
+    currentConnId = requestId
+
+    // 禁用按钮，显示停止状态
+    elems.sendBtn.disabled = false
+    elems.sendBtn.textContent = '停止'
 
     vscode.postMessage({ type: 'saveApi', payload: api })
     currentApiId = api.id
@@ -610,8 +641,14 @@
     elems.authType.value = authConfig.type || 'none'
     renderAuthContent(authConfig)
 
+    // 填充WebSocket消息
+    elems.wsMessage.value = api.wsMessage || ''
+
     // 更新 body 编辑器
     updateBodyEditor()
+    
+    // 根据方法更新 UI
+    updateUIforMethod()
   }
 
   function stringifyBody(body) {
@@ -718,6 +755,7 @@
       auth: auth.type !== 'none' ? auth : undefined,
       bodyType: elems.bodyType.value,
       body: body,
+      wsMessage: elems.wsMessage ? elems.wsMessage.value.trim() : undefined,
     }
 
     // 仅在代理启用时才添加代理配置字段
@@ -897,7 +935,8 @@
   function handleResponse(res) {
     if (!res) return
 
-    // 响应完成，启用按钮
+    // 响应完成，清除活跃请求ID并恢复按钮
+    currentConnId = null
     elems.sendBtn.disabled = false
     elems.sendBtn.textContent = '发送/保存'
 
@@ -907,10 +946,57 @@
       lastResponse = null
       return
     }
+    
+    // WebSocket 特殊处理（暂不关闭连接）
+    if (res.status === 101) {
+      // 记录连接ID，改变按钮为"停止连接"
+      currentConnId = res.connId
+      elems.sendBtn.disabled = false
+      elems.sendBtn.textContent = '停止'
+      
+      elems.responseMeta.textContent = `WebSocket 连接 - 状态：${res.status} ${res.statusText}`
+      elems.responseBody.textContent = res.data || '无消息'
+      lastResponse = { rawText: elems.responseBody.textContent }
+      return
+    }
+    
     const headers = JSON.stringify(res.headers, null, 2)
     const bodyText = typeof res.data === 'string' ? res.data : JSON.stringify(res.data, null, 2)
     elems.responseMeta.textContent = `状态：${res.status} ${res.statusText}`
     elems.responseBody.textContent = `Headers:\n${headers}\n\nBody:\n${bodyText}`
+    lastResponse = { rawText: elems.responseBody.textContent }
+  }
+
+  function handleWebSocketMessage(payload) {
+    const { connId, message, isClose } = payload
+    if (!elems.responseMeta.textContent.includes('WebSocket')) {
+      // 初始化响应元数据
+      elems.responseMeta.textContent = 'WebSocket 已连接'
+      elems.responseBody.textContent = ''
+    }
+    
+    // 追加消息
+    if (elems.responseBody.textContent) {
+      elems.responseBody.textContent += '\n' + message
+    } else {
+      elems.responseBody.textContent = message
+    }
+    
+    // 如果连接已关闭，清除connId并恢复按钮
+    if (isClose) {
+      currentConnId = null
+      elems.sendBtn.disabled = false
+      elems.sendBtn.textContent = '发送/保存'
+    }
+    
+    // 自动滚动到底部
+    const responseContainer = document.querySelector('.response')
+    if (responseContainer) {
+      setTimeout(() => {
+        responseContainer.scrollTop = responseContainer.scrollHeight
+      }, 0)
+    }
+    
     lastResponse = { rawText: elems.responseBody.textContent }
   }
 
@@ -1023,6 +1109,24 @@
     elems.bodyInput.placeholder = placeholders[bodyType] || ''
   }
 
+  function updateUIforMethod() {
+    const method = elems.apiMethod.value
+    const isWebSocket = method === 'WebSocket'
+    
+    const tabContainer = document.querySelector('.tabs-container')
+    const wsMessageSection = document.getElementById('wsMessageSection')
+    
+    if (isWebSocket) {
+      // 隐藏标签容器，显示 WebSocket 消息区域
+      tabContainer.style.display = 'none'
+      wsMessageSection.style.display = 'block'
+    } else {
+      // 显示标签容器，隐藏 WebSocket 消息区域
+      tabContainer.style.display = 'block'
+      wsMessageSection.style.display = 'none'
+    }
+  }
+
   function formatJson() {
     const text = elems.bodyInput.value.trim()
     if (!text) return
@@ -1131,6 +1235,11 @@
     const sizes = ['B', 'KB', 'MB', 'GB']
     const i = Math.floor(Math.log(bytes) / Math.log(k))
     return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i]
+  }
+
+  function generateRequestId() {
+    if (crypto.randomUUID) return crypto.randomUUID()
+    return 'req-' + Math.random().toString(16).slice(2)
   }
 
   function uid() {

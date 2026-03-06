@@ -6,8 +6,9 @@ import * as os from 'os'
 import * as path from 'path'
 import * as vscode from 'vscode'
 import { createClient } from 'webdav'
+import WebSocket from 'ws'
 
-type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'
+type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS' | 'WebSocket'
 
 interface ApiRequest {
   id: string
@@ -32,6 +33,8 @@ interface ApiRequest {
   proxyPort?: number
   proxyUsername?: string
   proxyPassword?: string
+  isWebSocket?: boolean
+  wsMessage?: string
 }
 
 interface ApiGroup {
@@ -52,6 +55,10 @@ let sidebarViewProviderRef: SidebarViewProvider | null = null
 const panelRefs = new Set<vscode.WebviewPanel>()
 // 记录每个 API 已打开的面板，避免重复标签
 const panelByApiId = new Map<string, vscode.WebviewPanel>()
+// WebSocket 连接管理器
+const wsConnections = new Map<string, { ws: WebSocket; panel: vscode.WebviewPanel; timeout: NodeJS.Timeout; isStopped?: boolean }>()
+// 追踪每个panel的活跃请求（可以是WebSocket connId或HTTP AbortController）
+const activeRequests = new Map<vscode.WebviewPanel, { type: 'ws' | 'http'; id: string; controller?: AbortController }>()
 
 function generateId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -191,13 +198,36 @@ function openPanel(context: vscode.ExtensionContext, selected?: string | { apiId
         break
       }
       case 'sendRequest': {
-        const result = await handleRequest(message.payload as ApiRequest)
+        const result = await handleRequest(message.payload as ApiRequest, panel)
         panel.webview.postMessage({ type: 'response', payload: result })
         break
       }
       case 'sendRequestWithFiles': {
         const result = await handleRequestWithFiles(message.payload.api as ApiRequest, message.payload.filePaths)
         panel.webview.postMessage({ type: 'response', payload: result })
+        break
+      }
+      case 'stopRequest': {
+        const activeReq = activeRequests.get(panel)
+        if (activeReq) {
+          if (activeReq.type === 'ws') {
+            // 停止 WebSocket 连接
+            const conn = wsConnections.get(activeReq.id)
+            if (conn) {
+              conn.isStopped = true // 标记为已停止
+              // 移除所有事件监听器，防止消息继续处理
+              conn.ws.removeAllListeners()
+              // 立即强制终止连接
+              conn.ws.close(1000, 'User stopped')
+              clearTimeout(conn.timeout)
+              wsConnections.delete(activeReq.id)
+            }
+          } else if (activeReq.type === 'http' && activeReq.controller) {
+            // 中止 HTTP 请求
+            activeReq.controller.abort()
+          }
+          activeRequests.delete(panel)
+        }
         break
       }
       case 'backupWebdav': {
@@ -245,7 +275,7 @@ function sanitizeGroup(group: any): ApiGroup | null {
 
 function sanitizeApi(api: any, groupIds?: Set<string>): ApiRequest | null {
   if (!api || typeof api !== 'object') return null
-  const allowedMethods: HttpMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
+  const allowedMethods: HttpMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS', 'WebSocket']
   const allowedBody: ApiRequest['bodyType'][] = ['json', 'form-data', 'urlencoded', 'raw']
   const method = allowedMethods.includes(api.method) ? api.method : 'GET'
   const bodyType = allowedBody.includes(api.bodyType) ? api.bodyType : 'json'
@@ -365,7 +395,116 @@ function getProxyConfig(api?: ApiRequest): any | null {
   }
 }
 
-async function handleRequest(api: ApiRequest) {
+function handleWebSocketRequest(api: ApiRequest, panel?: vscode.WebviewPanel): Promise<any> {
+  return new Promise((resolve) => {
+    try {
+      const ws = new WebSocket(api.url, {
+        headers: encodeHeaders(api.headers),
+        handshakeTimeout: 5000,
+      })
+
+      const connId = generateId()
+      let connected = false
+      const startTime = Date.now()
+
+      ws.on('open', () => {
+        connected = true
+        // 立即返回已连接状态
+        resolve({
+          success: true,
+          status: 101,
+          statusText: 'Switching Protocols',
+          headers: { 'upgrade': 'websocket' },
+          data: '[Connected] WebSocket connection established',
+          connId: connId,
+        })
+        
+        // 发送初始消息
+        if (api.wsMessage) {
+          try {
+            ws.send(api.wsMessage)
+            if (panel) {
+              panel.webview.postMessage({
+                type: 'wsMessage',
+                payload: { connId, message: `[Sent] ${api.wsMessage}` },
+              })
+            }
+          } catch (error: any) {
+            if (panel) {
+              panel.webview.postMessage({
+                type: 'wsMessage',
+                payload: { connId, message: `[Send Error] ${error?.message || String(error)}` },
+              })
+            }
+          }
+        }
+        
+        // 保存连接信息以支持长连接
+        if (panel) {
+          const timeout = setTimeout(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.close()
+            }
+          }, 60000) // 60秒自动超时
+          wsConnections.set(connId, { ws, panel, timeout })
+          activeRequests.set(panel, { type: 'ws', id: connId }) // 记录活跃的WebSocket请求
+        }
+      })
+
+      ws.on('message', (data: WebSocket.RawData) => {
+        const conn = wsConnections.get(connId)
+        // 只有在连接仍然存在且未被停止时才输出消息
+        if (conn && !conn.isStopped && panel) {
+          panel.webview.postMessage({
+            type: 'wsMessage',
+            payload: { connId, message: `[Received] ${data.toString()}` },
+          })
+        }
+      })
+
+      ws.on('error', (error: Error) => {
+        const conn = wsConnections.get(connId)
+        // 只有在连接仍然存在且未被停止时才输出错误
+        if (conn && !conn.isStopped && panel) {
+          panel.webview.postMessage({
+            type: 'wsMessage',
+            payload: { connId, message: `[Error] ${error?.message || String(error)}` },
+          })
+        }
+      })
+
+      ws.on('close', () => {
+        const conn = wsConnections.get(connId)
+        // 只在非用户停止的情况下发送关闭消息
+        if (panel && !conn?.isStopped) {
+          const duration = Date.now() - startTime
+          panel.webview.postMessage({
+            type: 'wsMessage',
+            payload: { connId, message: `[Closed] Connection closed after ${duration}ms`, isClose: true },
+          })
+        }
+        // 总是清除活跃请求和连接
+        if (panel) {
+          activeRequests.delete(panel)
+        }
+        wsConnections.delete(connId)
+        ws.terminate()
+      })
+    } catch (error: any) {
+      resolve({
+        success: false,
+        error: error?.message || String(error),
+      })
+    }
+  })
+}
+
+async function handleRequest(api: ApiRequest, panel?: vscode.WebviewPanel) {
+  // 检测WebSocket方法
+  if (api.method === 'WebSocket') {
+    return handleWebSocketRequest(api, panel)
+  }
+
   let url = api.url
 
   // 构建headers，包含auth认证
@@ -401,11 +540,21 @@ async function handleRequest(api: ApiRequest) {
     url = url + separator + params.toString()
   }
 
+  // 创建 AbortController 以支持请求中止
+  const controller = new AbortController()
+  const httpRequestId = generateId()
+
   const config: AxiosRequestConfig = {
     url: url,
     method: api.method,
     headers: headers,
     validateStatus: () => true,
+    signal: controller.signal,
+  }
+
+  // 记录活跃的 HTTP 请求
+  if (panel) {
+    activeRequests.set(panel, { type: 'http', id: httpRequestId, controller })
   }
 
   // 添加代理配置（支持API级别和全局级别）
@@ -443,8 +592,19 @@ async function handleRequest(api: ApiRequest) {
         break
     }
     const res: AxiosResponse = await axios(config)
+    if (panel) {
+      activeRequests.delete(panel)
+    }
     return { success: true, status: res.status, statusText: res.statusText, headers: res.headers, data: res.data }
   } catch (error: any) {
+    // 清除活跃请求记录
+    if (panel) {
+      activeRequests.delete(panel)
+    }
+    // 处理中止错误
+    if (error.name === 'AbortError') {
+      return { success: false, error: 'Request cancelled by user' }
+    }
     return { success: false, error: error?.message || String(error) }
   }
 }
