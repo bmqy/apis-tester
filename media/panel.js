@@ -384,6 +384,12 @@
     groupActiveIndex = -1
   }
 
+  const selectGroup = (group) => {
+    groupInputElem.value = group.name
+    groupInputElem.dataset.groupId = group.id
+    hideGroupSuggest()
+  }
+
   const renderGroupSuggest = () => {
     const keyword = (groupInputElem.value || '').trim().toLowerCase()
     let groupsToShow = state.groups
@@ -404,20 +410,29 @@
       item.textContent = g.name
       item.dataset.groupId = g.id
       item.dataset.index = String(idx)
-      item.onclick = (e) => {
+      item.onmousedown = (e) => {
         e.preventDefault()
-        groupInputElem.value = g.name
-        groupInputElem.dataset.groupId = g.id
-        hideGroupSuggest()
-        groupInputElem.focus()
+        selectGroup(g)
       }
       groupSuggestBox.appendChild(item)
     })
     groupActiveIndex = 0
+    Array.from(groupSuggestBox.children).forEach((child, idx) => {
+      child.classList.toggle('active', idx === groupActiveIndex)
+    })
     groupSuggestBox.classList.add('open')
   }
 
-  groupInputElem.addEventListener('input', renderGroupSuggest)
+  groupInputElem.addEventListener('input', () => {
+    const inputValue = groupInputElem.value.trim()
+    const matchedGroup = state.groups.find((g) => g.name === inputValue)
+    if (matchedGroup) {
+      groupInputElem.dataset.groupId = matchedGroup.id
+    } else {
+      delete groupInputElem.dataset.groupId
+    }
+    renderGroupSuggest()
+  })
   groupInputElem.addEventListener('focus', renderGroupSuggest)
   
   groupInputElem.addEventListener('keydown', (e) => {
@@ -440,9 +455,7 @@
       if (node) {
         const groupId = node.dataset.groupId
         const groupName = node.textContent
-        groupInputElem.value = groupName
-        groupInputElem.dataset.groupId = groupId
-        hideGroupSuggest()
+        selectGroup({ id: groupId, name: groupName })
         e.preventDefault()
       }
     } else if (e.key === 'Escape') {
