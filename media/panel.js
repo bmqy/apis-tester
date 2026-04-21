@@ -102,6 +102,13 @@
           <div class="block-header">
             <span>接口配置</span>
             <div>
+              <button id="importCodeBtn" class="ghost">粘贴导入</button>
+              <select id="quickExportFormat" class="quick-export-select" title="选择格式后自动复制到剪切板">
+                <option value="">导出并复制...</option>
+                <option value="curl">curl</option>
+                <option value="fetch">fetch</option>
+                <option value="wget">wget</option>
+              </select>
               <button id="sendBtn" class="primary">发送/保存</button>
             </div>
           </div>
@@ -314,6 +321,8 @@
     proxyUsername: document.getElementById('proxyUsername'),
     proxyPassword: document.getElementById('proxyPassword'),
     wsMessage: document.getElementById('wsMessage'),
+    importCodeBtn: document.getElementById('importCodeBtn'),
+    quickExportFormat: document.getElementById('quickExportFormat'),
   }
 
   let bodyEditMode = 'text' // "text" or "visual"
@@ -569,6 +578,62 @@
     elems.responseMeta.textContent = '已复制响应内容'
   })
 
+  elems.importCodeBtn.addEventListener('click', async () => {
+    let source = ''
+    try {
+      source = (await navigator.clipboard.readText()).trim()
+    } catch (error) {
+      elems.responseMeta.textContent = `读取剪切板失败：${error.message || String(error)}`
+      return
+    }
+
+    if (!source) {
+      elems.responseMeta.textContent = '剪切板为空，请先复制 curl/fetch/wget 代码'
+      return
+    }
+
+    try {
+      const imported = parseApiFromSource(source, 'auto')
+      const selectedGroupId = elems.apiGroupInput.dataset.groupId || null
+      const nextApi = {
+        ...defaultApi(selectedGroupId),
+        ...imported,
+        id: uid(),
+        groupId: imported.groupId ?? selectedGroupId,
+        name: imported.name || buildDefaultApiName(imported),
+      }
+
+      currentApiId = nextApi.id
+      fillApiForm(nextApi)
+      vscode.postMessage({ type: 'saveApi', payload: nextApi })
+      elems.responseMeta.textContent = '已从剪切板导入并创建新接口'
+    } catch (error) {
+      elems.responseMeta.textContent = `导入失败：${error.message || String(error)}`
+    }
+  })
+
+  elems.quickExportFormat.addEventListener('change', async () => {
+    const format = elems.quickExportFormat.value
+    if (!format) return
+
+    const api = collectApiForm({ createGroup: false })
+    if (!api.url) {
+      elems.responseMeta.textContent = '请先填写接口 URL'
+      elems.quickExportFormat.value = ''
+      return
+    }
+
+    try {
+      const code = generateCodeFromApi(api, format)
+      await navigator.clipboard.writeText(code)
+      elems.responseMeta.textContent = `已复制 ${format} 代码到剪切板`
+    } catch (error) {
+      elems.responseMeta.textContent = `导出失败：${error.message || String(error)}`
+    } finally {
+      elems.quickExportFormat.value = ''
+    }
+  })
+
   function defaultApi(selectedGroupId = null) {
     return {
       id: uid(),
@@ -673,7 +738,8 @@
     }
   }
 
-  function collectApiForm() {
+  function collectApiForm(options = {}) {
+    const { createGroup = true } = options
     const headers = {}
     elems.headerRows.querySelectorAll('.header-row').forEach((row) => {
       const key = row.querySelector('.h-key').value.trim()
@@ -726,10 +792,14 @@
       if (existingGroup) {
         groupId = existingGroup.id
       } else {
-        // 创建新分组
-        const newGroup = { id: uid(), name: groupInputValue }
-        vscode.postMessage({ type: 'saveGroup', payload: newGroup })
-        groupId = newGroup.id
+        if (createGroup) {
+          // 创建新分组
+          const newGroup = { id: uid(), name: groupInputValue }
+          vscode.postMessage({ type: 'saveGroup', payload: newGroup })
+          groupId = newGroup.id
+        } else {
+          groupId = null
+        }
       }
     } else if (!groupInputValue) {
       groupId = null
@@ -1248,6 +1318,927 @@
     const sizes = ['B', 'KB', 'MB', 'GB']
     const i = Math.floor(Math.log(bytes) / Math.log(k))
     return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i]
+  }
+
+  function parseApiFromSource(source, preferredFormat = 'auto') {
+    const format = detectSourceFormat(source, preferredFormat)
+    if (format === 'curl') return parseCurlSource(source)
+    if (format === 'fetch') return parseFetchSource(source)
+    if (format === 'wget') return parseWgetSource(source)
+    throw new Error('暂不支持该代码格式')
+  }
+
+  function detectSourceFormat(source, preferredFormat = 'auto') {
+    const format = (preferredFormat || 'auto').toLowerCase()
+    if (format !== 'auto') return format
+
+    const text = source.trim()
+    if (/^\s*curl(?:\.exe)?\b/i.test(text)) return 'curl'
+    if (/\bfetch\s*\(/i.test(text)) return 'fetch'
+    if (/^\s*wget(?:\.exe)?\b/i.test(text)) return 'wget'
+    throw new Error('无法自动识别代码类型，请手动选择格式')
+  }
+
+  function normalizeShellSource(source) {
+    return source
+      .replace(/\\\r?\n/g, ' ')
+      .replace(/`\r?\n/g, ' ')
+      .trim()
+  }
+
+  function tokenizeShellCommand(command) {
+    const tokens = []
+    let current = ''
+    let quote = ''
+
+    for (let i = 0; i < command.length; i += 1) {
+      const ch = command[i]
+
+      if (quote) {
+        if (ch === quote) {
+          quote = ''
+          continue
+        }
+        if (ch === '\\' && i + 1 < command.length) {
+          current += command[i + 1]
+          i += 1
+          continue
+        }
+        current += ch
+        continue
+      }
+
+      if (/\s/.test(ch)) {
+        if (current) {
+          tokens.push(current)
+          current = ''
+        }
+        continue
+      }
+
+      if (ch === '"' || ch === "'") {
+        quote = ch
+        continue
+      }
+
+      if (ch === '\\' && i + 1 < command.length) {
+        current += command[i + 1]
+        i += 1
+        continue
+      }
+
+      current += ch
+    }
+
+    if (current) tokens.push(current)
+    return tokens
+  }
+
+  function parseCommandOption(tokens, index) {
+    const token = tokens[index]
+    const eq = token.indexOf('=')
+    if (eq >= 0) {
+      return { value: token.slice(eq + 1), nextIndex: index }
+    }
+    return { value: tokens[index + 1] || '', nextIndex: index + 1 }
+  }
+
+  function applyHeaderLine(raw, headers, cookies) {
+    const idx = raw.indexOf(':')
+    if (idx <= 0) return
+
+    const key = raw.slice(0, idx).trim()
+    const value = raw.slice(idx + 1).trim()
+    if (!key) return
+
+    if (key.toLowerCase() === 'cookie') {
+      Object.assign(cookies, parseCookieString(value))
+      return
+    }
+
+    headers[key] = value
+  }
+
+  function parseCookieString(cookieText) {
+    const result = {}
+    const pieces = String(cookieText || '')
+      .split(';')
+      .map((item) => item.trim())
+      .filter(Boolean)
+
+    pieces.forEach((piece) => {
+      const eq = piece.indexOf('=')
+      if (eq <= 0) return
+      const key = piece.slice(0, eq).trim()
+      const value = piece.slice(eq + 1).trim()
+      if (key) result[key] = value
+    })
+    return result
+  }
+
+  function splitUrlAndParams(rawUrl) {
+    const urlText = String(rawUrl || '').trim()
+    if (!urlText) return { url: '', params: {} }
+
+    try {
+      const parsed = new URL(urlText)
+      const params = {}
+      parsed.searchParams.forEach((value, key) => {
+        params[key] = value
+      })
+      parsed.search = ''
+      return { url: parsed.toString(), params }
+    } catch {
+      const qIndex = urlText.indexOf('?')
+      if (qIndex < 0) return { url: urlText, params: {} }
+
+      const base = urlText.slice(0, qIndex)
+      const query = urlText.slice(qIndex + 1)
+      const params = {}
+      const queryPairs = query.split('&').filter(Boolean)
+      queryPairs.forEach((pair) => {
+        const [rawKey, rawVal = ''] = pair.split('=')
+        const key = decodeURIComponent(rawKey || '').trim()
+        if (!key) return
+        params[key] = decodeURIComponent(rawVal || '').trim()
+      })
+      return { url: base, params }
+    }
+  }
+
+  function inferBodyType(headers, bodyText) {
+    const normalizedHeaders = Object.entries(headers || {}).reduce((acc, [key, value]) => {
+      acc[String(key).toLowerCase()] = String(value)
+      return acc
+    }, {})
+
+    const contentType = normalizedHeaders['content-type'] || ''
+    if (contentType.includes('application/json')) return 'json'
+    if (contentType.includes('application/x-www-form-urlencoded')) return 'urlencoded'
+    if (contentType.includes('multipart/form-data')) return 'form-data'
+
+    const trimmed = String(bodyText || '').trim()
+    if (!trimmed) return 'json'
+    if (tryParseJsonLike(trimmed) !== null) return 'json'
+    if (/^[^=\s]+=[^\n]+(&[^=\s]+=[^\n]+)*$/.test(trimmed)) return 'urlencoded'
+    return 'raw'
+  }
+
+  function normalizeBodyValue(bodyText, bodyType) {
+    const raw = String(bodyText || '').trim()
+    if (!raw) return ''
+
+    if (bodyType === 'json') {
+      const parsed = tryParseJsonLike(raw)
+      if (parsed !== null) {
+        return JSON.stringify(parsed, null, 2)
+      }
+    }
+
+    return raw
+  }
+
+  function extractAuthFromHeaders(headers) {
+    const entries = Object.entries(headers || {})
+    const authEntry = entries.find(([key]) => key.toLowerCase() === 'authorization')
+    if (!authEntry) return undefined
+
+    const value = String(authEntry[1] || '').trim()
+    if (!value) return undefined
+
+    if (/^bearer\s+/i.test(value)) {
+      return { type: 'bearer', bearer: value.replace(/^bearer\s+/i, '').trim() }
+    }
+
+    if (/^basic\s+/i.test(value)) {
+      const encoded = value.replace(/^basic\s+/i, '').trim()
+      try {
+        const decoded = atob(encoded)
+        const idx = decoded.indexOf(':')
+        if (idx >= 0) {
+          return { type: 'basic', username: decoded.slice(0, idx), password: decoded.slice(idx + 1) }
+        }
+      } catch {
+        // ignore decode error
+      }
+    }
+
+    return { type: 'custom', custom: `Authorization: ${value}` }
+  }
+
+  function finalizeImportedApi(data) {
+    const output = {
+      url: data.url || '',
+      method: data.method || 'GET',
+      headers: data.headers || {},
+      bodyType: data.bodyType || 'json',
+      body: data.body || '',
+    }
+
+    if (data.params && Object.keys(data.params).length > 0) {
+      output.params = data.params
+    }
+    if (data.cookies && Object.keys(data.cookies).length > 0) {
+      output.cookies = data.cookies
+    }
+    if (data.auth && data.auth.type && data.auth.type !== 'none') {
+      output.auth = data.auth
+    }
+    if (data.wsMessage) {
+      output.wsMessage = data.wsMessage
+    }
+
+    return output
+  }
+
+  function parseCurlSource(source) {
+    const command = normalizeShellSource(source)
+    const tokens = tokenizeShellCommand(command)
+    if (!tokens.length || !/^curl(?:\.exe)?$/i.test(tokens[0])) {
+      throw new Error('不是有效的 curl 命令')
+    }
+
+    let method = 'GET'
+    let url = ''
+    let body = ''
+    let hasBody = false
+    let hasExplicitMethod = false
+    const headers = {}
+    const cookies = {}
+    let auth
+
+    for (let i = 1; i < tokens.length; i += 1) {
+      const token = tokens[i]
+
+      if (token === '-X' || token === '--request' || token.startsWith('--request=')) {
+        const parsed = parseCommandOption(tokens, i)
+        method = String(parsed.value || 'GET').toUpperCase()
+        hasExplicitMethod = true
+        i = parsed.nextIndex
+        continue
+      }
+
+      if (token === '-H' || token === '--header' || token.startsWith('--header=')) {
+        const parsed = parseCommandOption(tokens, i)
+        applyHeaderLine(parsed.value, headers, cookies)
+        i = parsed.nextIndex
+        continue
+      }
+
+      if (
+        token === '-d' ||
+        token === '--data' ||
+        token === '--data-raw' ||
+        token === '--data-binary' ||
+        token === '--data-urlencode' ||
+        token.startsWith('--data=') ||
+        token.startsWith('--data-raw=') ||
+        token.startsWith('--data-binary=') ||
+        token.startsWith('--data-urlencode=')
+      ) {
+        const parsed = parseCommandOption(tokens, i)
+        body = parsed.value || ''
+        hasBody = true
+        i = parsed.nextIndex
+        continue
+      }
+
+      if (token === '-b' || token === '--cookie' || token.startsWith('--cookie=')) {
+        const parsed = parseCommandOption(tokens, i)
+        Object.assign(cookies, parseCookieString(parsed.value || ''))
+        i = parsed.nextIndex
+        continue
+      }
+
+      if (token === '-u' || token === '--user' || token.startsWith('--user=')) {
+        const parsed = parseCommandOption(tokens, i)
+        const userPair = String(parsed.value || '')
+        const sep = userPair.indexOf(':')
+        auth = {
+          type: 'basic',
+          username: sep >= 0 ? userPair.slice(0, sep) : userPair,
+          password: sep >= 0 ? userPair.slice(sep + 1) : '',
+        }
+        i = parsed.nextIndex
+        continue
+      }
+
+      if (token === '-I' || token === '--head') {
+        method = 'HEAD'
+        hasExplicitMethod = true
+        continue
+      }
+
+      if (token === '--url' || token.startsWith('--url=')) {
+        const parsed = parseCommandOption(tokens, i)
+        url = parsed.value || url
+        i = parsed.nextIndex
+        continue
+      }
+
+      if (/^https?:\/\//i.test(token) || /^wss?:\/\//i.test(token)) {
+        url = token
+      }
+    }
+
+    if (!url) {
+      throw new Error('未识别到 URL')
+    }
+
+    if (!hasExplicitMethod && hasBody) {
+      method = 'POST'
+    }
+
+    const { url: cleanUrl, params } = splitUrlAndParams(url)
+    if (!auth) auth = extractAuthFromHeaders(headers)
+    const isWebSocket = /^wss?:\/\//i.test(cleanUrl)
+    if (isWebSocket) method = 'WebSocket'
+
+    const bodyType = inferBodyType(headers, body)
+
+    return finalizeImportedApi({
+      url: cleanUrl,
+      method,
+      headers,
+      params,
+      cookies,
+      auth,
+      bodyType,
+      body: normalizeBodyValue(body, bodyType),
+      wsMessage: isWebSocket ? body : undefined,
+    })
+  }
+
+  function parseWgetSource(source) {
+    const command = normalizeShellSource(source)
+    const tokens = tokenizeShellCommand(command)
+    if (!tokens.length || !/^wget(?:\.exe)?$/i.test(tokens[0])) {
+      throw new Error('不是有效的 wget 命令')
+    }
+
+    let method = 'GET'
+    let url = ''
+    let body = ''
+    let hasBody = false
+    let user = ''
+    let password = ''
+    const headers = {}
+    const cookies = {}
+
+    for (let i = 1; i < tokens.length; i += 1) {
+      const token = tokens[i]
+
+      if (token === '--method' || token.startsWith('--method=')) {
+        const parsed = parseCommandOption(tokens, i)
+        method = String(parsed.value || 'GET').toUpperCase()
+        i = parsed.nextIndex
+        continue
+      }
+
+      if (token === '--header' || token.startsWith('--header=')) {
+        const parsed = parseCommandOption(tokens, i)
+        applyHeaderLine(parsed.value, headers, cookies)
+        i = parsed.nextIndex
+        continue
+      }
+
+      if (
+        token === '--body-data' ||
+        token === '--post-data' ||
+        token.startsWith('--body-data=') ||
+        token.startsWith('--post-data=')
+      ) {
+        const parsed = parseCommandOption(tokens, i)
+        body = parsed.value || ''
+        hasBody = true
+        i = parsed.nextIndex
+        continue
+      }
+
+      if (token === '--user' || token.startsWith('--user=')) {
+        const parsed = parseCommandOption(tokens, i)
+        user = parsed.value || ''
+        i = parsed.nextIndex
+        continue
+      }
+
+      if (token === '--password' || token.startsWith('--password=')) {
+        const parsed = parseCommandOption(tokens, i)
+        password = parsed.value || ''
+        i = parsed.nextIndex
+        continue
+      }
+
+      if (/^https?:\/\//i.test(token) || /^wss?:\/\//i.test(token)) {
+        url = token
+      }
+    }
+
+    if (!url) throw new Error('未识别到 URL')
+    if (method === 'GET' && hasBody) method = 'POST'
+
+    const { url: cleanUrl, params } = splitUrlAndParams(url)
+    const isWebSocket = /^wss?:\/\//i.test(cleanUrl)
+    if (isWebSocket) method = 'WebSocket'
+
+    let auth
+    if (user || password) {
+      auth = { type: 'basic', username: user, password }
+    } else {
+      auth = extractAuthFromHeaders(headers)
+    }
+
+    const bodyType = inferBodyType(headers, body)
+
+    return finalizeImportedApi({
+      url: cleanUrl,
+      method,
+      headers,
+      params,
+      cookies,
+      auth,
+      bodyType,
+      body: normalizeBodyValue(body, bodyType),
+      wsMessage: isWebSocket ? body : undefined,
+    })
+  }
+
+  function parseFetchSource(source) {
+    const text = source.trim()
+    const fetchIndex = text.indexOf('fetch')
+    if (fetchIndex < 0) throw new Error('不是有效的 fetch 代码')
+
+    const openParen = text.indexOf('(', fetchIndex)
+    if (openParen < 0) throw new Error('fetch 语法不完整')
+
+    const closeParen = findMatchingBracket(text, openParen, '(', ')')
+    if (closeParen < 0) throw new Error('fetch 参数解析失败')
+
+    const argsText = text.slice(openParen + 1, closeParen)
+    const args = splitTopLevel(argsText, ',')
+    if (!args.length) throw new Error('fetch 参数为空')
+
+    const rawUrl = args[0].trim()
+    const url = parseStringOrRaw(rawUrl)
+    if (!url) throw new Error('未识别到 URL')
+
+    const headers = {}
+    const cookies = {}
+    let method = 'GET'
+    let body = ''
+    let hasMethod = false
+    let auth
+
+    if (args.length > 1) {
+      const rawOptions = args.slice(1).join(',').trim()
+      const props = parseObjectPropertiesRaw(rawOptions)
+
+      if (props.method) {
+        method = String(parseStringOrRaw(props.method) || 'GET').toUpperCase()
+        hasMethod = true
+      }
+
+      if (props.headers) {
+        const headerMap = parseHeaderObjectRaw(props.headers)
+        Object.entries(headerMap).forEach(([key, value]) => {
+          if (key.toLowerCase() === 'cookie') {
+            Object.assign(cookies, parseCookieString(value))
+          } else {
+            headers[key] = value
+          }
+        })
+      }
+
+      if (props.body) {
+        body = parseFetchBodyRaw(props.body)
+      }
+    }
+
+    if (!hasMethod && body) {
+      method = 'POST'
+    }
+
+    const { url: cleanUrl, params } = splitUrlAndParams(url)
+    const isWebSocket = /^wss?:\/\//i.test(cleanUrl)
+    if (isWebSocket) method = 'WebSocket'
+
+    auth = extractAuthFromHeaders(headers)
+    const bodyType = inferBodyType(headers, body)
+
+    return finalizeImportedApi({
+      url: cleanUrl,
+      method,
+      headers,
+      params,
+      cookies,
+      auth,
+      bodyType,
+      body: normalizeBodyValue(body, bodyType),
+      wsMessage: isWebSocket ? body : undefined,
+    })
+  }
+
+  function splitTopLevel(text, delimiter) {
+    const result = []
+    let current = ''
+    let quote = ''
+    let depthParen = 0
+    let depthBrace = 0
+    let depthBracket = 0
+
+    for (let i = 0; i < text.length; i += 1) {
+      const ch = text[i]
+
+      if (quote) {
+        current += ch
+        if (ch === '\\' && i + 1 < text.length) {
+          current += text[i + 1]
+          i += 1
+          continue
+        }
+        if (ch === quote) {
+          quote = ''
+        }
+        continue
+      }
+
+      if (ch === '"' || ch === "'" || ch === '`') {
+        quote = ch
+        current += ch
+        continue
+      }
+
+      if (ch === '(') depthParen += 1
+      if (ch === ')') depthParen = Math.max(0, depthParen - 1)
+      if (ch === '{') depthBrace += 1
+      if (ch === '}') depthBrace = Math.max(0, depthBrace - 1)
+      if (ch === '[') depthBracket += 1
+      if (ch === ']') depthBracket = Math.max(0, depthBracket - 1)
+
+      if (ch === delimiter && depthParen === 0 && depthBrace === 0 && depthBracket === 0) {
+        if (current.trim()) result.push(current.trim())
+        current = ''
+        continue
+      }
+
+      current += ch
+    }
+
+    if (current.trim()) result.push(current.trim())
+    return result
+  }
+
+  function findMatchingBracket(text, startIndex, openCh, closeCh) {
+    let depth = 0
+    let quote = ''
+
+    for (let i = startIndex; i < text.length; i += 1) {
+      const ch = text[i]
+
+      if (quote) {
+        if (ch === '\\' && i + 1 < text.length) {
+          i += 1
+          continue
+        }
+        if (ch === quote) quote = ''
+        continue
+      }
+
+      if (ch === '"' || ch === "'" || ch === '`') {
+        quote = ch
+        continue
+      }
+
+      if (ch === openCh) depth += 1
+      if (ch === closeCh) {
+        depth -= 1
+        if (depth === 0) return i
+      }
+    }
+
+    return -1
+  }
+
+  function parseObjectPropertiesRaw(rawObjectText) {
+    const text = String(rawObjectText || '').trim()
+    if (!text.startsWith('{') || !text.endsWith('}')) return {}
+
+    const inner = text.slice(1, -1).trim()
+    if (!inner) return {}
+
+    const props = {}
+    const segments = splitTopLevel(inner, ',')
+    segments.forEach((segment) => {
+      const colonIndex = findTopLevelColon(segment)
+      if (colonIndex < 0) return
+      const rawKey = segment.slice(0, colonIndex).trim()
+      const rawValue = segment.slice(colonIndex + 1).trim()
+      const key = normalizeObjectKey(rawKey)
+      if (!key) return
+      props[key] = rawValue
+    })
+
+    return props
+  }
+
+  function findTopLevelColon(text) {
+    let quote = ''
+    let depthParen = 0
+    let depthBrace = 0
+    let depthBracket = 0
+
+    for (let i = 0; i < text.length; i += 1) {
+      const ch = text[i]
+
+      if (quote) {
+        if (ch === '\\' && i + 1 < text.length) {
+          i += 1
+          continue
+        }
+        if (ch === quote) quote = ''
+        continue
+      }
+
+      if (ch === '"' || ch === "'" || ch === '`') {
+        quote = ch
+        continue
+      }
+
+      if (ch === '(') depthParen += 1
+      if (ch === ')') depthParen = Math.max(0, depthParen - 1)
+      if (ch === '{') depthBrace += 1
+      if (ch === '}') depthBrace = Math.max(0, depthBrace - 1)
+      if (ch === '[') depthBracket += 1
+      if (ch === ']') depthBracket = Math.max(0, depthBracket - 1)
+
+      if (ch === ':' && depthParen === 0 && depthBrace === 0 && depthBracket === 0) {
+        return i
+      }
+    }
+
+    return -1
+  }
+
+  function normalizeObjectKey(rawKey) {
+    const key = String(rawKey || '').trim()
+    if (!key) return ''
+    if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'")) || (key.startsWith('`') && key.endsWith('`'))) {
+      return key.slice(1, -1)
+    }
+    return key
+  }
+
+  function parseStringOrRaw(rawValue) {
+    const text = String(rawValue || '').trim()
+    if (!text) return ''
+
+    const quote = text[0]
+    const isQuoted = (quote === '"' || quote === "'" || quote === '`') && text[text.length - 1] === quote
+    if (!isQuoted) return text
+
+    if (quote === '"') {
+      try {
+        return JSON.parse(text)
+      } catch {
+        return text.slice(1, -1)
+      }
+    }
+
+    return text
+      .slice(1, -1)
+      .replace(/\\'/g, "'")
+      .replace(/\\`/g, '`')
+      .replace(/\\\\/g, '\\')
+  }
+
+  function parseHeaderObjectRaw(rawHeaders) {
+    const parsedJson = tryParseJsonLike(rawHeaders)
+    if (parsedJson && typeof parsedJson === 'object' && !Array.isArray(parsedJson)) {
+      return Object.entries(parsedJson).reduce((acc, [key, value]) => {
+        acc[String(key)] = String(value)
+        return acc
+      }, {})
+    }
+
+    const props = parseObjectPropertiesRaw(rawHeaders)
+    return Object.entries(props).reduce((acc, [key, value]) => {
+      acc[String(key)] = String(parseStringOrRaw(value) || '')
+      return acc
+    }, {})
+  }
+
+  function parseFetchBodyRaw(rawBody) {
+    const text = String(rawBody || '').trim()
+    if (!text) return ''
+
+    if (/^JSON\.stringify\s*\(/i.test(text)) {
+      const firstParen = text.indexOf('(')
+      const endParen = findMatchingBracket(text, firstParen, '(', ')')
+      if (firstParen >= 0 && endParen > firstParen) {
+        const inner = text.slice(firstParen + 1, endParen)
+        const parsedInner = tryParseJsonLike(inner)
+        if (parsedInner !== null) {
+          return JSON.stringify(parsedInner, null, 2)
+        }
+        return inner.trim()
+      }
+    }
+
+    const parsedText = parseStringOrRaw(text)
+    if (typeof parsedText === 'string') {
+      return parsedText
+    }
+
+    const parsedJson = tryParseJsonLike(text)
+    if (parsedJson !== null) {
+      return JSON.stringify(parsedJson, null, 2)
+    }
+
+    return text
+  }
+
+  function tryParseJsonLike(text) {
+    const raw = String(text || '').trim()
+    if (!raw) return null
+
+    try {
+      return JSON.parse(raw)
+    } catch {
+      const relaxed = raw
+        .replace(/([{,]\s*)([A-Za-z_$][A-Za-z0-9_$-]*)\s*:/g, '$1"$2":')
+        .replace(/'([^'\\]*(?:\\.[^'\\]*)*)'/g, '"$1"')
+      try {
+        return JSON.parse(relaxed)
+      } catch {
+        return null
+      }
+    }
+  }
+
+  function buildDefaultApiName(api) {
+    const method = String(api?.method || 'GET').toUpperCase()
+    const url = String(api?.url || '').trim()
+    if (!url) return `${method} 接口`
+
+    try {
+      const parsed = new URL(url)
+      const pathPart = parsed.pathname && parsed.pathname !== '/' ? parsed.pathname : parsed.hostname
+      return `${method} ${pathPart}`
+    } catch {
+      return `${method} ${url}`
+    }
+  }
+
+  function generateCodeFromApi(api, format) {
+    if (format === 'fetch') return generateFetchCode(api)
+    if (format === 'wget') return generateWgetCode(api)
+    return generateCurlCode(api)
+  }
+
+  function buildRequestUrl(api) {
+    const baseUrl = String(api.url || '').trim()
+    const params = api.params && typeof api.params === 'object' ? api.params : {}
+    const entries = Object.entries(params).filter(([key]) => Boolean(String(key).trim()))
+    if (!entries.length) return baseUrl
+
+    const query = entries
+      .map(([key, value]) => `${encodeURIComponent(String(key))}=${encodeURIComponent(String(value ?? ''))}`)
+      .join('&')
+
+    const joiner = baseUrl.includes('?') ? '&' : '?'
+    return `${baseUrl}${joiner}${query}`
+  }
+
+  function mergeEffectiveHeaders(api) {
+    const headers = { ...(api.headers || {}) }
+
+    if (api.auth && api.auth.type === 'bearer' && api.auth.bearer) {
+      if (!Object.keys(headers).some((key) => key.toLowerCase() === 'authorization')) {
+        headers.Authorization = `Bearer ${api.auth.bearer}`
+      }
+    }
+
+    if (api.auth && api.auth.type === 'basic' && (api.auth.username || api.auth.password)) {
+      if (!Object.keys(headers).some((key) => key.toLowerCase() === 'authorization')) {
+        const raw = `${api.auth.username || ''}:${api.auth.password || ''}`
+        const encoded = btoa(unescape(encodeURIComponent(raw)))
+        headers.Authorization = `Basic ${encoded}`
+      }
+    }
+
+    if (api.auth && api.auth.type === 'custom' && api.auth.custom) {
+      const custom = String(api.auth.custom)
+      const idx = custom.indexOf(':')
+      if (idx > 0) {
+        const key = custom.slice(0, idx).trim()
+        const value = custom.slice(idx + 1).trim()
+        if (key && value && !headers[key]) {
+          headers[key] = value
+        }
+      }
+    }
+
+    const cookies = api.cookies && typeof api.cookies === 'object' ? api.cookies : {}
+    const cookieEntries = Object.entries(cookies).filter(([key]) => Boolean(String(key).trim()))
+    if (cookieEntries.length > 0 && !Object.keys(headers).some((key) => key.toLowerCase() === 'cookie')) {
+      headers.Cookie = cookieEntries.map(([key, value]) => `${key}=${value}`).join('; ')
+    }
+
+    return headers
+  }
+
+  function normalizeBodyForExport(api) {
+    const body = api.body == null ? '' : String(api.body)
+    return body.trim()
+  }
+
+  function shouldExportBody(api, bodyText) {
+    const method = String(api.method || 'GET').toUpperCase()
+    if (!bodyText) return false
+    return method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS' && method !== 'WEBSOCKET'
+  }
+
+  function shellQuote(value) {
+    return `'${String(value || '').replace(/'/g, `'\\''`)}'`
+  }
+
+  function formatShellCommand(program, args) {
+    if (!args.length) return program
+    const lines = []
+    lines.push(`${program} ${args[0]}${args.length > 1 ? ' \\' : ''}`)
+    for (let i = 1; i < args.length; i += 1) {
+      const suffix = i === args.length - 1 ? '' : ' \\'
+      lines.push(`  ${args[i]}${suffix}`)
+    }
+    return lines.join('\n')
+  }
+
+  function generateCurlCode(api) {
+    const method = String(api.method || 'GET').toUpperCase()
+    const url = buildRequestUrl(api)
+    const headers = mergeEffectiveHeaders(api)
+    const bodyText = normalizeBodyForExport(api)
+
+    const args = [`--request ${method}`, `--url ${shellQuote(url)}`]
+
+    Object.entries(headers).forEach(([key, value]) => {
+      args.push(`--header ${shellQuote(`${key}: ${value}`)}`)
+    })
+
+    if (shouldExportBody(api, bodyText)) {
+      args.push(`--data ${shellQuote(bodyText)}`)
+    }
+
+    return formatShellCommand('curl', args)
+  }
+
+  function generateWgetCode(api) {
+    const method = String(api.method || 'GET').toUpperCase()
+    const url = buildRequestUrl(api)
+    const headers = mergeEffectiveHeaders(api)
+    const bodyText = normalizeBodyForExport(api)
+
+    const args = [`--method=${method}`]
+    Object.entries(headers).forEach(([key, value]) => {
+      args.push(`--header=${shellQuote(`${key}: ${value}`)}`)
+    })
+
+    if (shouldExportBody(api, bodyText)) {
+      args.push(`--body-data=${shellQuote(bodyText)}`)
+    }
+
+    args.push('-O -')
+    args.push(shellQuote(url))
+    return formatShellCommand('wget', args)
+  }
+
+  function generateFetchCode(api) {
+    const method = String(api.method || 'GET').toUpperCase()
+    const url = buildRequestUrl(api)
+    const headers = mergeEffectiveHeaders(api)
+    const bodyText = normalizeBodyForExport(api)
+    const optionsLines = [`method: ${JSON.stringify(method)}`]
+
+    const headerEntries = Object.entries(headers)
+    if (headerEntries.length > 0) {
+      const headerLines = headerEntries.map(([key, value]) => `    ${JSON.stringify(key)}: ${JSON.stringify(String(value))}`)
+      optionsLines.push(`headers: {\n${headerLines.join(',\n')}\n  }`)
+    }
+
+    if (shouldExportBody(api, bodyText)) {
+      if (api.bodyType === 'json') {
+        const parsed = tryParseJsonLike(bodyText)
+        if (parsed !== null) {
+          optionsLines.push(`body: JSON.stringify(${JSON.stringify(parsed, null, 2)})`)
+        } else {
+          optionsLines.push(`body: ${JSON.stringify(bodyText)}`)
+        }
+      } else {
+        optionsLines.push(`body: ${JSON.stringify(bodyText)}`)
+      }
+    }
+
+    return `fetch(${JSON.stringify(url)}, {\n  ${optionsLines.join(',\n  ')}\n});`
   }
 
   function generateRequestId() {
