@@ -978,10 +978,10 @@
         item.className = 'suggest-item'
         item.textContent = h
         item.dataset.index = String(idx)
-        item.onclick = (e) => {
-          e.preventDefault()
+        item.addEventListener('mousedown', (e) => {
+          e.preventDefault() // 阻止 input blur，确保 click 能正常触发选中
           applyValue(h)
-        }
+        })
         listEl.appendChild(item)
       })
       activeIndex = 0
