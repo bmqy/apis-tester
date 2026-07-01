@@ -101,7 +101,7 @@
         <div class="block" id="configBlock">
           <div class="block-header">
             <span>接口配置</span>
-            <div>
+            <div class="config-actions">
               <button id="importCodeBtn" class="ghost">粘贴导入</button>
               <select id="quickExportFormat" class="quick-export-select" title="选择格式后自动复制到剪切板">
                 <option value="">导出并复制...</option>
@@ -114,7 +114,7 @@
           </div>
           <div class="form">
             <!-- 基本信息行1: 名称和分组 -->
-            <div class="row">
+            <div class="row field-row">
               <label class="full-width">
                 名称 
                 <input id="apiName" placeholder="例如：获取用户信息" />
@@ -129,7 +129,7 @@
             </div>
 
             <!-- 基本信息行2: Method和URL -->
-            <div class="row method-url-row">
+            <div class="row method-url-row request-line">
               <label class="method-label">
                 Method
                 <select id="apiMethod">
@@ -150,7 +150,7 @@
             </div>
 
             <!-- WebSocket 消息区域 (默认隐藏) -->
-            <div id="wsMessageSection" style="display: none; margin-top: 10px; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+            <div id="wsMessageSection" class="panel-section ws-message-section" style="display: none;">
               <div class="label-row">
                 <span>WebSocket 消息</span>
               </div>
@@ -178,7 +178,7 @@
 
               <!-- Body Tab -->
               <div class="tab-content" id="body-tab">
-                <div class="row">
+                <div class="row body-type-row">
                   <label>Body 类型
                     <select id="bodyType">
                       <option value="json">JSON</option>
@@ -191,7 +191,7 @@
                 <div class="body-editor">
                   <div class="label-row">
                     <span>Body 内容</span>
-                    <div>
+                    <div class="tab-actions">
                       <button id="formatJsonBtn" type="button" class="ghost mini hidden">格式化 JSON</button>
                       <button id="addBodyFieldBtn" type="button" class="hidden">添加字段</button>
                       <button id="toggleBodyModeBtn" type="button" class="ghost mini hidden">切换为文本模式</button>
