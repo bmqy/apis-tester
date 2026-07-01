@@ -1480,25 +1480,48 @@
     const trimmed = String(bodyText || '').trim()
     if (!trimmed) return 'json'
     if (tryParseJsonLike(trimmed) !== null) return 'json'
-    if (/^[^=\s]+=[^\n]+(&[^=\s]+=[^\n]+)*$/.test(trimmed)) return 'urlencoded'
-    return 'raw'
-  }
+   if (/^[^=\s]+=[^\n]+(&[^=\s]+=[^\n]+)*$/.test(trimmed)) return 'urlencoded'
+   return 'raw'
+ }
 
-  function normalizeBodyValue(bodyText, bodyType) {
-    const raw = String(bodyText || '').trim()
-    if (!raw) return ''
+function normalizeBodyValue(bodyText, bodyType) {
+  const raw = String(bodyText || '').trim()
+  if (!raw) return ''
 
-    if (bodyType === 'json') {
-      const parsed = tryParseJsonLike(raw)
-      if (parsed !== null) {
-        return JSON.stringify(parsed, null, 2)
-      }
+  if (bodyType === 'json') {
+    const parsed = tryParseJsonLike(raw)
+    if (parsed !== null) {
+      return JSON.stringify(parsed, null, 2)
     }
-
-    return raw
   }
 
-  function extractAuthFromHeaders(headers) {
+  if (bodyType === 'urlencoded') {
+    const obj = {}
+    String(raw)
+      .split('&')
+      .filter((part) => part.trim())
+      .forEach((pair) => {
+        const eq = pair.indexOf('=')
+        const key = eq < 0 ? pair : pair.slice(0, eq)
+        const value = eq < 0 ? '' : pair.slice(eq + 1)
+        const safeDecode = (text) => {
+          try {
+            return decodeURIComponent(String(text).replace(/\+/g, ' '))
+          } catch {
+            return String(text).replace(/\+/g, ' ')
+          }
+        }
+        obj[safeDecode(key)] = safeDecode(value)
+      })
+    if (Object.keys(obj).length > 0) {
+      return JSON.stringify(obj, null, 2)
+    }
+  }
+
+  return raw
+}
+
+function extractAuthFromHeaders(headers) {
     const entries = Object.entries(headers || {})
     const authEntry = entries.find(([key]) => key.toLowerCase() === 'authorization')
     if (!authEntry) return undefined
@@ -1551,21 +1574,22 @@
     return output
   }
 
-  function parseCurlSource(source) {
-    const command = normalizeShellSource(source)
-    const tokens = tokenizeShellCommand(command)
-    if (!tokens.length || !/^curl(?:\.exe)?$/i.test(tokens[0])) {
-      throw new Error('不是有效的 curl 命令')
+ function parseCurlSource(source) {
+   const command = normalizeShellSource(source)
+   const tokens = tokenizeShellCommand(command)
+   if (!tokens.length || !/^curl(?:\.exe)?$/i.test(tokens[0])) {
+     throw new Error('不是有效的 curl 命令')
     }
 
     let method = 'GET'
     let url = ''
-    let body = ''
-    let hasBody = false
-    let hasExplicitMethod = false
-    const headers = {}
-    const cookies = {}
-    let auth
+   let body = ''
+   let hasBody = false
+   let hasExplicitMethod = false
+   const headers = {}
+   const cookies = {}
+   let auth
+   const dataParts = []
 
     for (let i = 1; i < tokens.length; i += 1) {
       const token = tokens[i]
@@ -1585,23 +1609,26 @@
         continue
       }
 
-      if (
-        token === '-d' ||
-        token === '--data' ||
-        token === '--data-raw' ||
-        token === '--data-binary' ||
-        token === '--data-urlencode' ||
-        token.startsWith('--data=') ||
-        token.startsWith('--data-raw=') ||
-        token.startsWith('--data-binary=') ||
-        token.startsWith('--data-urlencode=')
-      ) {
-        const parsed = parseCommandOption(tokens, i)
-        body = parsed.value || ''
-        hasBody = true
-        i = parsed.nextIndex
-        continue
-      }
+     if (
+       token === '-d' ||
+       token === '--data' ||
+       token === '--data-raw' ||
+       token === '--data-binary' ||
+       token === '--data-urlencode' ||
+       token.startsWith('--data=') ||
+       token.startsWith('--data-raw=') ||
+       token.startsWith('--data-binary=') ||
+       token.startsWith('--data-urlencode=')
+     ) {
+       const parsed = parseCommandOption(tokens, i)
+       const value = parsed.value || ''
+       if (value) {
+         dataParts.push(value)
+       }
+       hasBody = true
+       i = parsed.nextIndex
+       continue
+     }
 
       if (token === '-b' || token === '--cookie' || token.startsWith('--cookie=')) {
         const parsed = parseCommandOption(tokens, i)
@@ -1636,14 +1663,18 @@
         continue
       }
 
-      if (/^https?:\/\//i.test(token) || /^wss?:\/\//i.test(token)) {
-        url = token
-      }
-    }
+     if (/^https?:\/\//i.test(token) || /^wss?:\/\//i.test(token)) {
+       url = token
+     }
+   }
 
-    if (!url) {
-      throw new Error('未识别到 URL')
-    }
+   if (!body && dataParts.length > 0) {
+     body = dataParts.join('&')
+   }
+
+   if (!url) {
+     throw new Error('未识别到 URL')
+   }
 
     if (!hasExplicitMethod && hasBody) {
       method = 'POST'
@@ -2147,12 +2178,25 @@
     return headers
   }
 
-  function normalizeBodyForExport(api) {
-    const body = api.body == null ? '' : String(api.body)
-    return body.trim()
-  }
+ function normalizeBodyForExport(api) {
+   const body = api.body == null ? '' : String(api.body)
+   const trimmed = body.trim()
+   if (api.bodyType === 'urlencoded') {
+     try {
+       const obj = JSON.parse(trimmed)
+       const parts = []
+       Object.entries(obj).forEach(([key, value]) => {
+         parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(value ?? ''))}`)
+       })
+       return parts.join('&')
+     } catch {
+       return trimmed
+     }
+   }
+   return trimmed
+ }
 
-  function shouldExportBody(api, bodyText) {
+ function shouldExportBody(api, bodyText) {
     const method = String(api.method || 'GET').toUpperCase()
     if (!bodyText) return false
     return method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS' && method !== 'WEBSOCKET'
