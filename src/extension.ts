@@ -996,10 +996,10 @@ class SidebarViewProvider implements vscode.WebviewViewProvider {
     <style>
       body { margin: 0; padding: 12px; font-family: "Segoe UI", system-ui, sans-serif; color: #1f2937; background: #f7f8fa; }
       .toolbar { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
-      .search { flex: 1; display: flex; align-items: center; background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 4px 8px; }
+      .search { box-sizing: border-box; height: 32px; flex: 1; display: flex; align-items: center; background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 4px 8px; }
       .search input { border: none; outline: none; width: 100%; font-size: 12px; background: transparent; color: #1f2937; }
       .search input::placeholder { color: #9ca3af; }
-      .icon-btn { width: 32px; height: 32px; border-radius: 6px; border: 1px solid #e5e7eb; background: #fff; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: #4b5563; }
+      .icon-btn { box-sizing: border-box; width: 32px; height: 32px; border-radius: 6px; border: 1px solid #e5e7eb; background: #fff; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: #4b5563; font-size: 16px; line-height: 1; }
       .icon-btn:hover { border-color: #d1d5db; color: #111827; }
       .menu { position: absolute; right: 12px; top: 54px; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 8px 18px rgba(0,0,0,0.08); min-width: 180px; padding: 6px 0; z-index: 10; display: none; }
       .menu.open { display: block; }
@@ -1007,6 +1007,8 @@ class SidebarViewProvider implements vscode.WebviewViewProvider {
       .menu-item:hover { background: #f3f4f6; }
       .menu-item.active { background: #eef2ff; color: #4338ca; }
       .menu-item.disabled { color: #9ca3af; cursor: default; }
+      .menu-item.disabled:hover { background: transparent; }
+      .menu-separator { height: 1px; margin: 6px 0; background: #e5e7eb; }
       .list { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
       .group { border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; }
       .group-header { padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 600; color: #1f2937; border-bottom: 1px solid #e5e7eb; cursor: pointer; }
@@ -1033,7 +1035,7 @@ class SidebarViewProvider implements vscode.WebviewViewProvider {
       <div class="search">
         <input id="keywordInput" type="text" placeholder="搜索接口" />
       </div>
-      <button id="groupMenuBtn" class="icon-btn" title="分组筛选">☰</button>
+      <button id="groupMenuBtn" class="icon-btn" title="分组筛选" aria-label="分组筛选">···</button>
     </div>
     <div class="list" id="apiList"></div>
     <div id="groupMenu" class="menu"></div>
@@ -1065,6 +1067,28 @@ class SidebarViewProvider implements vscode.WebviewViewProvider {
     document.addEventListener("click", () => groupMenu.classList.remove("open"));
     groupMenu.addEventListener("click", (e) => e.stopPropagation());
     keywordInput.oninput = () => renderList();
+
+    function getVisibleGroupKeys() {
+      const state = latestState || {};
+      const keyword = (keywordInput.value || "").trim().toLowerCase();
+      const groups = Array.isArray(state.groups) ? state.groups : [];
+      const apis = Array.isArray(state.apis) ? state.apis : [];
+      if (currentFilter && !groups.some((g) => g.id === currentFilter)) currentFilter = "";
+      const buckets = currentFilter
+        ? groups.filter((g) => g.id === currentFilter)
+        : [...groups, { id: null, name: "未分组" }];
+
+      return buckets
+        .filter((g) => apis.some((api) => {
+          const inGroup = g.id === null ? !api.groupId : api.groupId === g.id;
+          if (!inGroup) return false;
+          if (!keyword) return true;
+          const nameHit = api.name && api.name.toLowerCase().includes(keyword);
+          const urlHit = api.url && api.url.toLowerCase().includes(keyword);
+          return nameHit || urlHit;
+        }))
+        .map((g) => g.id ?? "__ungrouped");
+    }
 
     function renderList() {
       const state = latestState || {};
@@ -1213,6 +1237,24 @@ class SidebarViewProvider implements vscode.WebviewViewProvider {
       const state = latestState || {};
       const groups = Array.isArray(state.groups) ? state.groups : [];
       groupMenu.innerHTML = "";
+      const visibleKeys = getVisibleGroupKeys();
+      const canExpandAll = visibleKeys.some((key) => collapsed.has(key));
+      const canCollapseAll = visibleKeys.some((key) => !collapsed.has(key));
+      const makeActionItem = (label, enabled, handler) => {
+        const item = document.createElement("div");
+        item.className = "menu-item" + (enabled ? "" : " disabled");
+        item.textContent = label;
+        item.onclick = () => {
+          if (!enabled) return;
+          handler();
+          renderList();
+          renderFilter();
+          groupMenu.classList.remove("open");
+        };
+        return item;
+      };
+      const separator = document.createElement("div");
+      separator.className = "menu-separator";
       const makeItem = (id, label) => {
         const item = document.createElement("div");
         item.className = "menu-item" + (currentFilter === id ? " active" : "");
@@ -1224,6 +1266,13 @@ class SidebarViewProvider implements vscode.WebviewViewProvider {
         };
         return item;
       };
+      groupMenu.appendChild(makeActionItem("全部展开", canExpandAll, () => {
+        visibleKeys.forEach((key) => collapsed.delete(key));
+      }));
+      groupMenu.appendChild(makeActionItem("全部收起", canCollapseAll, () => {
+        visibleKeys.forEach((key) => collapsed.add(key));
+      }));
+      groupMenu.appendChild(separator);
       groupMenu.appendChild(makeItem("", "全部分组"));
       groups.forEach((g) => {
         groupMenu.appendChild(makeItem(g.id, g.name || "未命名分组"));
