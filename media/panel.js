@@ -112,6 +112,9 @@
                 <option value="wget">wget</option>
               </select>
               <button id="sendBtn" class="primary">发送/保存</button>
+              <button id="toggleResponseVisibilityBtn" class="ghost icon-button response-visibility-button" type="button" aria-label="显示响应结果区域" title="显示响应结果区域">
+                <span class="response-visibility-icon" aria-hidden="true"></span>
+              </button>
             </div>
           </div>
           <div class="form">
@@ -310,6 +313,7 @@
     addBodyFieldBtn: document.getElementById('addBodyFieldBtn'),
     toggleBodyModeBtn: document.getElementById('toggleBodyModeBtn'),
     sendBtn: document.getElementById('sendBtn'),
+    toggleResponseVisibilityBtn: document.getElementById('toggleResponseVisibilityBtn'),
     responseMeta: document.getElementById('responseMeta'),
     responseBody: document.getElementById('responseBody'),
     responseToggleBtn: document.getElementById('responseToggleBtn'),
@@ -344,6 +348,13 @@
     app.style.setProperty('--response-panel-width', `${responsePanelWidth}px`)
   }
 
+  function updateResponseVisibilityButton() {
+    const label = isResponsePanelOpen ? '隐藏响应结果区域' : '显示响应结果区域'
+    elems.toggleResponseVisibilityBtn.setAttribute('aria-label', label)
+    elems.toggleResponseVisibilityBtn.setAttribute('title', label)
+    elems.toggleResponseVisibilityBtn.setAttribute('aria-pressed', String(isResponsePanelOpen))
+  }
+
   function setResponsePanelOpen(open) {
     if (responsePanelTimer) {
       clearTimeout(responsePanelTimer)
@@ -373,6 +384,7 @@
     elems.responseToggleBtn.setAttribute('aria-expanded', String(open))
     elems.responseToggleBtn.setAttribute('aria-label', '拖动调整响应区域宽度')
     elems.responseToggleBtn.setAttribute('title', '拖动调整响应区域宽度')
+    updateResponseVisibilityButton()
   }
 
   applyResponsePanelWidth(responsePanelWidth)
@@ -417,6 +429,10 @@
     resizeDrag = null
     app.classList.remove('response-resizing')
     elems.responseToggleBtn.releasePointerCapture(event.pointerId)
+  })
+
+  elems.toggleResponseVisibilityBtn.addEventListener('click', () => {
+    setResponsePanelOpen(!isResponsePanelOpen)
   })
 
   window.addEventListener('resize', () => {

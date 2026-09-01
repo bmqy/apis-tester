@@ -108,6 +108,58 @@ button.mini {
   margin-left: 0;
 }
 
+button.icon-button {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.response-visibility-button[aria-pressed='true'] {
+  background: var(--primary-soft);
+  border-color: #93c5fd;
+  color: var(--primary);
+}
+
+.response-visibility-icon {
+  width: 18px;
+  height: 18px;
+  border: 2px solid currentColor;
+  border-radius: 4px;
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+}
+
+.response-visibility-icon::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 50%;
+  background: var(--primary);
+}
+
+.response-visibility-icon::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  background: currentColor;
+  transform: translateX(-1px);
+}
+
+.response-visibility-button[aria-pressed='false'] .response-visibility-icon::before {
+  opacity: 0.35;
+}
+
 #app {
   width: 100%;
   height: 100%;
