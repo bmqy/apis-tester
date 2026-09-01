@@ -35,6 +35,13 @@ interface ApiRequest {
   proxyPassword?: string
   isWebSocket?: boolean
   wsMessage?: string
+  lastResponse?: {
+    meta: string
+    body: string
+    rawText: string
+    updatedAt: number
+    status?: 'success' | 'failed'
+  }
 }
 
 interface ApiGroup {
@@ -297,6 +304,17 @@ function sanitizeApi(api: any, groupIds?: Set<string>): ApiRequest | null {
     body: api.body ?? '',
   }
 
+  if (api.lastResponse && typeof api.lastResponse === 'object') {
+    const meta = typeof api.lastResponse.meta === 'string' ? api.lastResponse.meta : ''
+    const body = typeof api.lastResponse.body === 'string' ? api.lastResponse.body : ''
+    const rawText = typeof api.lastResponse.rawText === 'string' ? api.lastResponse.rawText : body
+    const updatedAt = typeof api.lastResponse.updatedAt === 'number' ? api.lastResponse.updatedAt : Date.now()
+    const responseStatus = normalizeLastResponseStatus(api.lastResponse.status, meta)
+    if (meta || body || rawText) {
+      sanitized.lastResponse = { meta, body, rawText, updatedAt, status: responseStatus }
+    }
+  }
+
   // 处理auth配置
   if (api.auth && typeof api.auth === 'object') {
     const authType = api.auth.type || 'none'
@@ -336,6 +354,13 @@ function sanitizeApi(api: any, groupIds?: Set<string>): ApiRequest | null {
   }
 
   return sanitized
+}
+
+function normalizeLastResponseStatus(status: any, meta: string): 'success' | 'failed' | undefined {
+  if (status === 'success' || status === 'failed') return status
+  if (meta.startsWith('请求失败')) return 'failed'
+  if (meta.startsWith('状态') || meta.includes('WebSocket')) return 'success'
+  return undefined
 }
 
 // 对headers中的非ASCII字符进行编码，使其符合HTTP头规范
@@ -939,8 +964,9 @@ class SidebarViewProvider implements vscode.WebviewViewProvider {
           const state = readState(this.context)
           const target = state.apis.find((a) => a.id === msg.apiId)
           if (target) {
+            const { lastResponse, ...copySource } = target
             const copiedApi: ApiRequest = {
-              ...target,
+              ...copySource,
               id: generateId(),
               name: `${target.name || target.url} - 副本`,
             }
@@ -1016,6 +1042,10 @@ class SidebarViewProvider implements vscode.WebviewViewProvider {
       .group-items { display: flex; flex-direction: column; }
       .item { position: relative; display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: #1f2933; cursor: pointer; padding: 6px 10px; }
       .item:hover { background: rgba(37,99,235,0.08); }
+      .status-dot { width: 6px; height: 6px; border-radius: 999px; flex: 0 0 6px; box-shadow: 0 0 0 1px rgba(255,255,255,0.9); }
+      .status-dot.success { background: #16a34a; }
+      .status-dot.failed { background: #dc2626; }
+      .status-dot.pending { background: #cbd5e1; }
       .item .name { flex: 1; white-space: normal; word-break: break-all; overflow: hidden; text-overflow: ellipsis; }
       .item .meta { color: #6c7a89; font-size: 12px; margin-left: 10px; flex-shrink: 0; white-space: normal; word-break: break-all; }
       .item .actions { display: flex; gap: 6px; align-items: center; margin-left: 6px; opacity: 0; transition: opacity 120ms ease; }
@@ -1179,6 +1209,10 @@ class SidebarViewProvider implements vscode.WebviewViewProvider {
         leftWrap.style.display = "flex";
         leftWrap.style.alignItems = "center";
         leftWrap.style.gap = "8px";
+        const requestStatus = getRequestStatus(api);
+        const statusDot = document.createElement("span");
+        statusDot.className = "status-dot " + requestStatus;
+        statusDot.title = requestStatus === "success" ? "上次请求成功" : requestStatus === "failed" ? "上次请求失败" : "未执行";
         const pill = document.createElement("span");
         pill.className = "pill";
         pill.textContent = api.method || "";
@@ -1195,6 +1229,7 @@ class SidebarViewProvider implements vscode.WebviewViewProvider {
           meta.style.display = "none";
         }
         leftWrap.appendChild(pill);
+        leftWrap.appendChild(statusDot);
         leftWrap.appendChild(name);
         if (meta.style.display !== "none") leftWrap.appendChild(meta);
 
@@ -1231,6 +1266,16 @@ class SidebarViewProvider implements vscode.WebviewViewProvider {
       if (renderedCount === 0) {
         apiList.innerHTML = '<div class="empty">暂无接口</div>';
       }
+    }
+
+    function getRequestStatus(api) {
+      const lastResponse = api && api.lastResponse;
+      const status = lastResponse && lastResponse.status;
+      if (status === "success" || status === "failed") return status;
+      const meta = lastResponse && typeof lastResponse.meta === "string" ? lastResponse.meta : "";
+      if (meta.startsWith("请求失败")) return "failed";
+      if (meta.startsWith("状态") || meta.includes("WebSocket")) return "success";
+      return "pending";
     }
 
     function renderFilter() {

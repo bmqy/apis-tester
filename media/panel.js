@@ -4,6 +4,8 @@
   let currentApiId = null
   let lastResponse = null
   let hasInitialState = false
+  let activeRequestApiId = null
+  let pendingRequestApi = null
 
   const HEADERS_CATALOG = [
     'Accept',
@@ -267,7 +269,8 @@
           </div>
         </div>
       </div>
-      <div class="right-column">
+      <button id="responseToggleBtn" class="response-toggle" type="button" aria-label="拖动调整响应区域宽度" title="拖动调整响应区域宽度"></button>
+      <div class="right-column" id="responsePanel">
         <div class="block">
           <div class="block-header">
             <span>响应结果</span>
@@ -309,6 +312,7 @@
     sendBtn: document.getElementById('sendBtn'),
     responseMeta: document.getElementById('responseMeta'),
     responseBody: document.getElementById('responseBody'),
+    responseToggleBtn: document.getElementById('responseToggleBtn'),
     copyResponseBtn: document.getElementById('copyResponseBtn'),
     fileUploadSection: document.getElementById('fileUploadSection'),
     fileList: document.getElementById('fileList'),
@@ -328,6 +332,96 @@
   let bodyEditMode = 'text' // "text" or "visual"
   let selectedFiles = [] // 存储选择的文件信息（包含内容）
   let currentConnId = null // 追踪当前活跃请求ID（WebSocket连接ID或HTTP请求ID）
+  let isResponsePanelOpen = false
+  let responsePanelTimer = null
+  let responsePanelWidth = 440
+  let resizeDrag = null
+
+  function applyResponsePanelWidth(width) {
+    const minWidth = 320
+    const maxWidth = Math.max(minWidth, Math.min(760, Math.round(window.innerWidth * 0.58)))
+    responsePanelWidth = Math.min(maxWidth, Math.max(minWidth, width))
+    app.style.setProperty('--response-panel-width', `${responsePanelWidth}px`)
+  }
+
+  function setResponsePanelOpen(open) {
+    if (responsePanelTimer) {
+      clearTimeout(responsePanelTimer)
+      responsePanelTimer = null
+    }
+
+    isResponsePanelOpen = open
+
+    if (open) {
+      app.classList.add('response-mounted')
+      app.classList.remove('response-collapsed')
+      requestAnimationFrame(() => {
+        if (!isResponsePanelOpen) return
+        app.classList.add('response-open')
+      })
+    } else {
+      app.classList.remove('response-open')
+      app.classList.add('response-collapsing')
+      responsePanelTimer = setTimeout(() => {
+        if (isResponsePanelOpen) return
+        app.classList.remove('response-mounted', 'response-collapsing')
+        app.classList.add('response-collapsed')
+        responsePanelTimer = null
+      }, 170)
+    }
+
+    elems.responseToggleBtn.setAttribute('aria-expanded', String(open))
+    elems.responseToggleBtn.setAttribute('aria-label', '拖动调整响应区域宽度')
+    elems.responseToggleBtn.setAttribute('title', '拖动调整响应区域宽度')
+  }
+
+  applyResponsePanelWidth(responsePanelWidth)
+
+  setResponsePanelOpen(false)
+
+  elems.responseToggleBtn.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return
+    resizeDrag = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startWidth: responsePanelWidth,
+      moved: false,
+    }
+    elems.responseToggleBtn.setPointerCapture(event.pointerId)
+  })
+
+  elems.responseToggleBtn.addEventListener('pointermove', (event) => {
+    if (!resizeDrag || resizeDrag.pointerId !== event.pointerId) return
+    const delta = resizeDrag.startX - event.clientX
+    if (Math.abs(delta) < 4 && !resizeDrag.moved) return
+    resizeDrag.moved = true
+    if (!isResponsePanelOpen) setResponsePanelOpen(true)
+    app.classList.add('response-resizing')
+    applyResponsePanelWidth(resizeDrag.startWidth + delta)
+  })
+
+  elems.responseToggleBtn.addEventListener('dblclick', () => {
+    applyResponsePanelWidth(440)
+    if (!isResponsePanelOpen) setResponsePanelOpen(true)
+  })
+
+  elems.responseToggleBtn.addEventListener('pointerup', (event) => {
+    if (!resizeDrag || resizeDrag.pointerId !== event.pointerId) return
+    resizeDrag = null
+    app.classList.remove('response-resizing')
+    elems.responseToggleBtn.releasePointerCapture(event.pointerId)
+  })
+
+  elems.responseToggleBtn.addEventListener('pointercancel', (event) => {
+    if (!resizeDrag || resizeDrag.pointerId !== event.pointerId) return
+    resizeDrag = null
+    app.classList.remove('response-resizing')
+    elems.responseToggleBtn.releasePointerCapture(event.pointerId)
+  })
+
+  window.addEventListener('resize', () => {
+    applyResponsePanelWidth(responsePanelWidth)
+  })
 
   // Tab 切换功能
   document.querySelectorAll('.tab-btn').forEach((btn) => {
@@ -542,6 +636,7 @@
 
     const api = collectApiForm()
     if (!api.url) {
+      setResponsePanelOpen(true)
       elems.responseMeta.textContent = '请先填写接口 URL'
       elems.responseBody.textContent = ''
       return
@@ -560,6 +655,8 @@
 
     vscode.postMessage({ type: 'saveApi', payload: api })
     currentApiId = api.id
+    activeRequestApiId = api.id
+    pendingRequestApi = api
 
     // 如果有文件，发送文件上传请求
     if (selectedFiles.length > 0) {
@@ -568,6 +665,7 @@
       vscode.postMessage({ type: 'sendRequest', payload: api })
     }
 
+    setResponsePanelOpen(true)
     elems.responseMeta.textContent = '请求中...'
     elems.responseBody.textContent = ''
   })
@@ -727,6 +825,8 @@
     
     // 根据方法更新 UI
     updateUIforMethod()
+
+    renderLastResponse(api)
   }
 
   function stringifyBody(body) {
@@ -839,6 +939,11 @@
       bodyType: elems.bodyType.value,
       body: body,
       wsMessage: elems.wsMessage ? elems.wsMessage.value.trim() : undefined,
+    }
+
+    const existingApi = currentApiId ? state.apis.find((item) => item.id === currentApiId) : null
+    if (existingApi?.lastResponse) {
+      apiObj.lastResponse = existingApi.lastResponse
     }
 
     // 仅在代理启用时才添加代理配置字段
@@ -1017,6 +1122,9 @@
 
   function handleResponse(res) {
     if (!res) return
+    setResponsePanelOpen(true)
+    const responseApiId = activeRequestApiId || currentApiId
+    activeRequestApiId = null
 
     // 响应完成，清除活跃请求ID并恢复按钮
     currentConnId = null
@@ -1026,7 +1134,7 @@
     if (!res.success) {
       elems.responseMeta.textContent = `请求失败：${res.error}`
       elems.responseBody.textContent = ''
-      lastResponse = null
+      persistLastResponse(responseApiId, 'failed')
       return
     }
     
@@ -1040,6 +1148,7 @@
       elems.responseMeta.textContent = `WebSocket 连接 - 状态：${res.status} ${res.statusText}`
       elems.responseBody.textContent = res.data || '无消息'
       lastResponse = { rawText: elems.responseBody.textContent }
+      persistLastResponse(responseApiId, 'success')
       return
     }
     
@@ -1048,9 +1157,11 @@
     elems.responseMeta.textContent = `状态：${res.status} ${res.statusText}`
     elems.responseBody.textContent = `Headers:\n${headers}\n\nBody:\n${bodyText}`
     lastResponse = { rawText: elems.responseBody.textContent }
+    persistLastResponse(responseApiId, 'success')
   }
 
   function handleWebSocketMessage(payload) {
+    setResponsePanelOpen(true)
     const { connId, message, isClose } = payload
     if (!elems.responseMeta.textContent.includes('WebSocket')) {
       // 初始化响应元数据
@@ -1081,6 +1192,47 @@
     }
     
     lastResponse = { rawText: elems.responseBody.textContent }
+    persistLastResponse(currentApiId, 'success')
+  }
+
+  function renderLastResponse(api) {
+    const saved = api && api.lastResponse
+    if (saved && (saved.meta || saved.body || saved.rawText)) {
+      elems.responseMeta.textContent = saved.meta || ''
+      elems.responseBody.textContent = saved.body || saved.rawText || ''
+      lastResponse = { rawText: saved.rawText || elems.responseBody.textContent }
+      setResponsePanelOpen(true)
+      return
+    }
+
+    elems.responseMeta.textContent = ''
+    elems.responseBody.textContent = ''
+    lastResponse = null
+    setResponsePanelOpen(false)
+  }
+
+  function persistLastResponse(apiId, status) {
+    if (!apiId) return
+    const api = state.apis.find((item) => item.id === apiId)
+
+    const savedResponse = {
+      meta: elems.responseMeta.textContent || '',
+      body: elems.responseBody.textContent || '',
+      rawText: elems.responseBody.textContent || '',
+      updatedAt: Date.now(),
+      status: status === 'failed' ? 'failed' : 'success',
+    }
+    const sourceApi = api || (pendingRequestApi && pendingRequestApi.id === apiId ? pendingRequestApi : null)
+    if (!sourceApi) return
+    if (!api) {
+      state.apis.push(sourceApi)
+    }
+    sourceApi.lastResponse = savedResponse
+    if (pendingRequestApi && pendingRequestApi.id === apiId) {
+      pendingRequestApi = null
+    }
+    lastResponse = { rawText: savedResponse.rawText }
+    vscode.postMessage({ type: 'saveApi', payload: sourceApi })
   }
 
   function applySelection(apiId, groupId = null) {

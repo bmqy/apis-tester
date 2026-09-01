@@ -16,6 +16,7 @@
   --danger: #dc2626;
   --shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
   --radius: 8px;
+  --response-panel-width: 440px;
 }
 
 html,
@@ -122,10 +123,10 @@ button.mini {
   align-items: stretch;
 }
 
-.two-column {
+main.two-column {
   display: grid;
-  grid-template-columns: minmax(540px, 1.18fr) minmax(380px, 0.82fr);
-  gap: 16px;
+  grid-template-columns: minmax(540px, 1fr) 12px minmax(0, 0);
+  gap: 0;
   padding: 16px;
   align-items: start;
   width: 100%;
@@ -135,13 +136,17 @@ button.mini {
   min-width: 800px;
 }
 
+#app.response-mounted main.two-column {
+  grid-template-columns: minmax(540px, 1fr) 12px minmax(320px, var(--response-panel-width));
+}
+
 .left-column {
   display: flex;
   flex-direction: column;
   gap: 16px;
   overflow-y: auto;
   min-height: 0;
-  padding-right: 2px;
+  padding-right: 0;
 }
 
 .left-column .block {
@@ -153,6 +158,97 @@ button.mini {
   flex-direction: column;
   min-height: 0;
   flex: 1;
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateX(-10px);
+  pointer-events: none;
+  contain: layout paint;
+  will-change: opacity, transform;
+  transition:
+    opacity 0.14s ease-out,
+    transform 0.16s ease-out;
+}
+
+#app.response-resizing .right-column {
+  transition: none;
+}
+
+#app.response-resizing,
+#app.response-resizing * {
+  user-select: none;
+}
+
+#app.response-open .right-column {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+  padding-left: 0;
+}
+
+#app.response-collapsed .right-column {
+  display: none;
+}
+
+.response-toggle {
+  align-self: stretch;
+  justify-self: stretch;
+  min-width: 12px;
+  width: 12px;
+  min-height: 0;
+  height: 100%;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--text-muted);
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+  position: relative;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.response-toggle:hover,
+.response-toggle:focus-visible {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.response-toggle::before,
+.response-toggle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 1px;
+  height: 42px;
+  border-radius: 999px;
+  background: repeating-linear-gradient(180deg, rgba(100, 116, 139, 0.5) 0 2px, transparent 2px 6px);
+  mask-image: linear-gradient(180deg, transparent 0%, #000 24%, #000 76%, transparent 100%);
+  opacity: 0;
+  transform: translateY(-50%);
+  transition: opacity 0.12s ease-out;
+}
+
+.response-toggle::before {
+  left: calc(50% - 2px);
+}
+
+.response-toggle::after {
+  left: calc(50% + 2px);
+}
+
+.response-toggle:hover::before,
+.response-toggle:focus-visible::before,
+.response-toggle:hover::after,
+.response-toggle:focus-visible::after,
+#app.response-resizing .response-toggle::before,
+#app.response-resizing .response-toggle::after {
+  opacity: 1;
 }
 
 .right-column .block {
@@ -204,6 +300,7 @@ button.mini {
   scrollbar-width: thin;
   scrollbar-color: #cbd5e1 #f1f5f9;
   display: block;
+  contain: content;
 }
 
 #responseBody {
@@ -240,7 +337,7 @@ button.mini {
 }
 
 @media (max-width: 768px) {
-  .two-column {
+  main.two-column {
     grid-template-columns: 1fr;
     height: auto;
   }
@@ -258,7 +355,7 @@ button.mini {
 
 /* 手机屏幕优化 (max-width: 480px) */
 @media (max-width: 480px) {
-  .two-column {
+  main.two-column {
     gap: 8px;
     padding: 8px;
   }
@@ -944,17 +1041,51 @@ textarea {
 }
 
 @media (max-width: 980px) {
-  .two-column {
+  main.two-column {
     grid-template-columns: 1fr;
     min-width: 0;
     height: auto;
     overflow: auto;
   }
 
+  #app.response-mounted main.two-column {
+    grid-template-columns: 1fr;
+  }
+
   .left-column,
   .right-column {
     overflow-y: visible;
     max-height: none;
+  }
+
+  #app.response-open .right-column {
+    padding-left: 0;
+  }
+
+  .response-toggle {
+    width: 100%;
+    min-width: 0;
+    height: 12px;
+    min-height: 12px;
+    align-self: auto;
+  }
+
+  .response-toggle::before,
+  .response-toggle::after {
+    width: 42px;
+    height: 1px;
+    left: 50%;
+    background: repeating-linear-gradient(90deg, rgba(100, 116, 139, 0.5) 0 2px, transparent 2px 6px);
+    mask-image: linear-gradient(90deg, transparent 0%, #000 24%, #000 76%, transparent 100%);
+    transform: translateX(-50%);
+  }
+
+  .response-toggle::before {
+    top: calc(50% - 2px);
+  }
+
+  .response-toggle::after {
+    top: calc(50% + 2px);
   }
 
   .right-column .block {
@@ -967,7 +1098,7 @@ textarea {
 }
 
 @media (max-width: 640px) {
-  .two-column {
+  main.two-column {
     gap: 10px;
     padding: 10px;
   }
