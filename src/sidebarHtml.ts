@@ -32,15 +32,14 @@ export function getSidebarViewHtml(webview: vscode.Webview) {
       .group-items { display: flex; flex-direction: column; }
       .item { position: relative; display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: #1f2933; cursor: pointer; padding: 6px 10px; }
       .item:hover { background: rgba(37,99,235,0.08); }
-      .status-dot { width: 6px; height: 6px; border-radius: 999px; flex: 0 0 6px; box-shadow: 0 0 0 1px rgba(255,255,255,0.9); }
-      .status-dot.success { background: #16a34a; }
-      .status-dot.failed { background: #dc2626; }
-      .status-dot.pending { background: #cbd5e1; }
       .item .name { flex: 1; white-space: normal; word-break: break-all; overflow: hidden; text-overflow: ellipsis; }
       .item .meta { color: #6c7a89; font-size: 12px; margin-left: 10px; flex-shrink: 0; white-space: normal; word-break: break-all; }
       .item .actions { display: flex; gap: 6px; align-items: center; margin-left: 6px; opacity: 0; transition: opacity 120ms ease; }
       .item:hover .actions { opacity: 1; }
-      .pill { padding: 2px 6px; border-radius: 6px; background: #eef2ff; color: #4338ca; font-size: 12px; margin-right: 6px; }
+      .pill { display: inline-flex; align-items: center; min-height: 19px; padding: 0 6px 0 7px; border-left: 2px solid #cbd5e1; background: #eef2ff; color: #4338ca; font-size: 11px; line-height: 1; margin-right: 6px; }
+      .pill.success { border-left-color: #16a34a; }
+      .pill.failed { border-left-color: #dc2626; }
+      .pill.pending { border-left-color: #cbd5e1; }
       .del-btn { border: none; background: transparent; color: #e11d48; cursor: pointer; font-size: 14px; line-height: 1; padding: 2px 4px; }
       .del-btn:hover { color: #b91c1c; }
       .copy-btn { border: none; background: transparent; color: #7c3aed; cursor: pointer; font-size: 14px; line-height: 1; padding: 2px 4px; }
@@ -195,11 +194,9 @@ export function getSidebarViewHtml(webview: vscode.Webview) {
         leftWrap.style.alignItems = "center";
         leftWrap.style.gap = "8px";
         const requestStatus = getRequestStatus(api);
-        const statusDot = document.createElement("span");
-        statusDot.className = "status-dot " + requestStatus;
-        statusDot.title = requestStatus === "success" ? "上次请求成功" : requestStatus === "failed" ? "上次请求失败" : "未执行";
         const pill = document.createElement("span");
-        pill.className = "pill";
+        pill.className = "pill " + requestStatus;
+        pill.title = requestStatus === "success" ? "上次请求成功" : requestStatus === "failed" ? "上次请求失败" : "未执行";
         pill.textContent = api.method || "";
         const name = document.createElement("span");
         name.className = "name";
@@ -214,7 +211,6 @@ export function getSidebarViewHtml(webview: vscode.Webview) {
           meta.style.display = "none";
         }
         leftWrap.appendChild(pill);
-        leftWrap.appendChild(statusDot);
         leftWrap.appendChild(name);
         if (meta.style.display !== "none") leftWrap.appendChild(meta);
 
@@ -259,7 +255,9 @@ export function getSidebarViewHtml(webview: vscode.Webview) {
       if (status === "success" || status === "failed") return status;
       const meta = lastResponse && typeof lastResponse.meta === "string" ? lastResponse.meta : "";
       if (meta.startsWith("请求失败")) return "failed";
-      if (meta.startsWith("状态") || meta.includes("WebSocket")) return "success";
+      if (meta.includes("WebSocket")) return "success";
+      const match = meta.match(/^状态[：:]\s*(\d{3})/);
+      if (match) return match[1] === "200" ? "success" : "failed";
       return "pending";
     }
 

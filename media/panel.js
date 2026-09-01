@@ -1173,7 +1173,7 @@
     elems.responseMeta.textContent = `状态：${res.status} ${res.statusText}`
     elems.responseBody.textContent = `Headers:\n${headers}\n\nBody:\n${bodyText}`
     lastResponse = { rawText: elems.responseBody.textContent }
-    persistLastResponse(responseApiId, 'success')
+    persistLastResponse(responseApiId, res.status === 200 ? 'success' : 'failed')
   }
 
   function handleWebSocketMessage(payload) {

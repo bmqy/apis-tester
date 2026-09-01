@@ -107,6 +107,8 @@ function sanitizeApi(api: any, groupIds?: Set<string>): ApiRequest | null {
 function normalizeLastResponseStatus(status: any, meta: string): 'success' | 'failed' | undefined {
   if (status === 'success' || status === 'failed') return status
   if (meta.startsWith('请求失败')) return 'failed'
-  if (meta.startsWith('状态') || meta.includes('WebSocket')) return 'success'
+  if (meta.includes('WebSocket')) return 'success'
+  const match = meta.match(/^状态[：:]\s*(\d{3})/)
+  if (match) return match[1] === '200' ? 'success' : 'failed'
   return undefined
 }
